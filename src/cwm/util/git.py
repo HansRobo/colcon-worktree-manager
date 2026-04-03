@@ -33,6 +33,11 @@ def _run(
 # -- Repository queries -------------------------------------------------------
 
 
+def is_git_repo(path: Path) -> bool:
+    """Return True if *path* is the root of a git repository."""
+    return (path / ".git").exists()
+
+
 def get_toplevel(cwd: Path | None = None) -> Path:
     """Return the absolute path of the repository root."""
     result = _run(["rev-parse", "--show-toplevel"], cwd=cwd)

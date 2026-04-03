@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import shutil
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
 from cwm.core.config import BaseWorkspaceConfig, Config
-from cwm.errors import WorktreeExistsError, WorktreeNotFoundError
+from cwm.errors import MetaModeRequiredError, WorktreeExistsError, WorktreeNotFoundError
 from cwm.util import git
 from cwm.util.fs import ensure_dir
 
@@ -21,7 +21,14 @@ class WorktreeMeta:
 
     branch: str
     created_at: str
-    base_sha: str  # SHA of the base branch when the worktree was created
+    base_sha: str
+    mode: str = "single"
+    sub_repos: list = field(default_factory=list)
+    sub_repo_shas: dict = field(default_factory=dict)
+
+    @property
+    def is_meta(self) -> bool:
+        return self.mode == "meta"
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -32,6 +39,10 @@ class WorktreeMeta:
     def load(cls, path: Path) -> WorktreeMeta:
         with open(path) as fh:
             data = yaml.safe_load(fh)
+        # Backward compatibility: old files may not have mode/sub_repos/sub_repo_shas
+        data.setdefault("mode", "single")
+        data.setdefault("sub_repos", [])
+        data.setdefault("sub_repo_shas", {})
         return cls(**data)
 
 
@@ -49,16 +60,19 @@ class WorktreeStateManager:
         *,
         underlay: str = "/opt/ros/jazzy",
         base_branch: str = "main",
+        meta: bool = False,
     ) -> Config:
         """Initialise a new CWM project at *project_root*.
 
         Creates .cwm/, base_ws/ directory structure and writes config.yaml.
         The caller is expected to populate base_ws/src/ with the repository
-        clone separately.
+        clone (single mode) or with ``vcs import`` (meta mode) separately.
         """
         config = Config(
             underlay=underlay,
             base_ws=BaseWorkspaceConfig(branch=base_branch),
+            worktrees_dir="worktrees",
+            mode="meta" if meta else "single",
             project_root=project_root,
         )
 
@@ -76,11 +90,27 @@ class WorktreeStateManager:
 
     # -- Worktree lifecycle ----------------------------------------------------
 
-    def create_worktree(self, branch: str) -> Path:
+    def create_worktree(
+        self,
+        branch: str,
+        sub_repos: list[str] | None = None,
+    ) -> Path:
         """Create a new overlay worktree for *branch*.
+
+        In meta mode *sub_repos* must be provided: a list of sub-repository
+        paths (relative to ``base_ws/src/``) to add as git worktrees.
 
         Returns the workspace root path (worktrees/<branch>_ws/).
         """
+        if self._cfg.is_meta:
+            if not sub_repos:
+                raise MetaModeRequiredError(
+                    "Meta-repository mode requires --repos to specify which "
+                    "sub-repositories to work on."
+                )
+            from cwm.core.meta_wsm import MetaWorkspaceManager
+            return MetaWorkspaceManager(self._cfg).create_worktree(branch, sub_repos)
+
         ws_path = self._cfg.worktree_ws_path(branch)
         src_path = self._cfg.worktree_src_path(branch)
 
@@ -114,6 +144,11 @@ class WorktreeStateManager:
 
     def remove_worktree(self, branch: str, *, force: bool = False) -> None:
         """Remove an overlay worktree and its build artifacts."""
+        if self._cfg.is_meta:
+            from cwm.core.meta_wsm import MetaWorkspaceManager
+            MetaWorkspaceManager(self._cfg).remove_worktree(branch, force=force)
+            return
+
         ws_path = self._cfg.worktree_ws_path(branch)
         src_path = self._cfg.worktree_src_path(branch)
 
