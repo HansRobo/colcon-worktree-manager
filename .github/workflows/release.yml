@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Bump version and create release
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine bump type from PR labels
+        id: bump
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map(l => l.name);
+            let bump = '';
+            if (labels.includes('release:major')) {
+              bump = 'major';
+            } else if (labels.includes('release:minor')) {
+              bump = 'minor';
+            } else if (labels.includes('release:patch')) {
+              bump = 'patch';
+            }
+            core.setOutput('type', bump);
+            if (!bump) {
+              core.warning('No release label found on merged PR. Skipping release.');
+            } else {
+              core.info(`Bump type: ${bump}`);
+            }
+
+      - uses: actions/checkout@v4
+        if: steps.bump.outputs.type != ''
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        if: steps.bump.outputs.type != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        if: steps.bump.outputs.type != ''
+        id: version
+        run: |
+          BUMP_TYPE="${{ steps.bump.outputs.type }}"
+
+          CURRENT=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "Current version: $CURRENT"
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "$BUMP_TYPE" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
+          sed -i "s/__version__ = \".*\"/__version__ = \"$NEW_VERSION\"/" src/cwm/__init__.py
+
+      - name: Commit and tag
+        if: steps.bump.outputs.type != ''
+        run: |
+          git add pyproject.toml src/cwm/__init__.py
+          git commit -m "release: ${{ steps.version.outputs.tag }}"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin main --tags
+
+      - name: Create GitHub Release
+        if: steps.bump.outputs.type != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = "${{ steps.version.outputs.tag }}";
+            const { data: release } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: tag,
+              generate_release_notes: true,
+            });
+            core.info(`Created release: ${release.html_url}`);
+
+      # Uncomment to publish to PyPI when ready:
+      # - uses: astral-sh/setup-uv@v5
+      #   if: steps.bump.outputs.type != ''
+      #   with:
+      #     version: "latest"
+      #
+      # - name: Build and publish to PyPI
+      #   if: steps.bump.outputs.type != ''
+      #   run: |
+      #     uv build
+      #     uv publish
+      #   env:
+      #     UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
