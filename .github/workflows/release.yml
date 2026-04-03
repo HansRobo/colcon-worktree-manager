@@ -21,6 +21,11 @@ jobs:
     if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Determine bump type
         id: bump
         uses: actions/github-script@v7
@@ -47,25 +52,16 @@ jobs:
             }
             core.setOutput('type', bump);
 
-      - uses: actions/checkout@v4
-        if: steps.bump.outputs.type != ''
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
-        if: steps.bump.outputs.type != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Bump version
+      - name: Compute next version
         if: steps.bump.outputs.type != ''
         id: version
         run: |
           BUMP_TYPE="${{ steps.bump.outputs.type }}"
 
-          CURRENT=$(grep '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          # Get latest tag (default to v0.0.0 if none)
+          CURRENT=$(git tag --list 'v*' --sort=-version:refname | head -1)
+          CURRENT="${CURRENT:-v0.0.0}"
+          CURRENT="${CURRENT#v}"
           echo "Current version: $CURRENT"
 
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
@@ -80,16 +76,17 @@ jobs:
           echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
-          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
-          sed -i "s/__version__ = \".*\"/__version__ = \"$NEW_VERSION\"/" src/cwm/__init__.py
-
-      - name: Commit and tag
+      - name: Configure git
         if: steps.bump.outputs.type != ''
         run: |
-          git add pyproject.toml src/cwm/__init__.py
-          git commit -m "release: ${{ steps.version.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push tag
+        if: steps.bump.outputs.type != ''
+        run: |
           git tag "${{ steps.version.outputs.tag }}"
-          git push origin main --tags
+          git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create GitHub Release
         if: steps.bump.outputs.type != ''
