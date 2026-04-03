@@ -20,8 +20,11 @@ pip install .
 ## Quick Start
 
 ```bash
-# 1. Initialise CWM in your project directory
-cwm init --underlay /opt/ros/jazzy
+# 1. Initialise CWM in your project directory (ROS 2 underlay is auto-detected)
+cwm init
+
+# Or specify a custom underlay if needed
+# cwm init --underlay /path/to/custom_ws
 
 # 2. Clone your ROS 2 source into base_ws/src/
 git clone <your-repo> base_ws/src/
@@ -46,7 +49,7 @@ exit
 
 | Command | Description |
 |---------|-------------|
-| `cwm init [--underlay PATH]` | Initialise a CWM project |
+| `cwm init [--underlay PATH]` | Initialise a CWM project (underlay auto-detected from `/opt/ros/`) |
 | `cwm base update` | Pull and rebuild the base workspace |
 | `cwm worktree add <branch>` | Create a new overlay worktree |
 | `cwm worktree rm <branch>` | Remove a worktree and its artifacts |
