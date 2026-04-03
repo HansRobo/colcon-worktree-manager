@@ -1,0 +1,68 @@
+"""cwm clean - clean overlay build artifacts."""
+
+from __future__ import annotations
+
+import os
+import shutil
+from pathlib import Path
+
+import click
+
+from cwm.cli.main import cli
+from cwm.core.config import Config
+from cwm.errors import CWMError, NotInSubshellError
+from cwm.util.fs import find_project_root
+
+ARTIFACT_DIRS = ("build", "install", "log")
+
+
+@cli.command()
+@click.option("--all", "clean_all", is_flag=True, help="Clean all worktree workspaces.")
+@click.option("--base", "clean_base", is_flag=True, help="Also clean the base workspace.")
+def clean(clean_all: bool, clean_base: bool) -> None:
+    """Clean build artifacts (build/, install/, log/) for the current worktree.
+
+    Must be run inside a CWM subshell unless --all is specified.
+    """
+    try:
+        root = find_project_root()
+        config = Config.load(root)
+
+        targets: list[tuple[str, list[Path]]] = []
+
+        if clean_all:
+            if config.worktrees_path.exists():
+                for ws_dir in sorted(config.worktrees_path.iterdir()):
+                    if ws_dir.is_dir() and ws_dir.name.endswith("_ws"):
+                        targets.append((ws_dir.name, _artifact_dirs(ws_dir)))
+            if clean_base:
+                targets.append(("base_ws", _artifact_dirs(config.base_ws_path)))
+        else:
+            branch = os.environ.get("CWM_WORKTREE")
+            if not branch:
+                raise NotInSubshellError(
+                    "cwm clean requires a CWM subshell (use 'cwm enter <branch>').\n"
+                    "Or use --all to clean all worktrees."
+                )
+            targets.append((branch, _artifact_dirs(config.worktree_ws_path(branch))))
+
+        if not targets:
+            click.echo("Nothing to clean.")
+            return
+
+        for name, dirs in targets:
+            for d in dirs:
+                if d.is_dir():
+                    click.echo(f"  Removing {d}")
+                    shutil.rmtree(d)
+            click.echo(f"  Cleaned: {name}")
+
+        click.echo("Clean complete.")
+
+    except CWMError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _artifact_dirs(ws_path: Path) -> list[Path]:
+    """Return build artifact directory paths for a workspace."""
+    return [ws_path / name for name in ARTIFACT_DIRS]
