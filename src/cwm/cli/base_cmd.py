@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+
 import click
 
 from cwm.cli.main import base
@@ -37,11 +40,18 @@ def update(no_build: bool) -> None:
             )
 
         if config.is_meta:
-            click.echo("Meta-repository workspace detected.")
-            click.echo(
-                "  To update sub-repositories, run: vcs pull base_ws/src"
-            )
-            click.echo("  Then rebuild the base workspace.")
+            vcs = shutil.which("vcs")
+            if vcs is None:
+                raise CWMError(
+                    "Meta-repository update requires the 'vcs' tool (vcstool).\n"
+                    "Install it with: pip install vcstool\n"
+                    "Then run: vcs pull base_ws/src"
+                )
+            click.echo("Pulling sub-repositories with vcs...")
+            result = subprocess.run([vcs, "pull", str(src_path)], check=False)
+            if result.returncode != 0:
+                raise CWMError(f"vcs pull failed with exit code {result.returncode}")
+            click.echo("  vcs pull complete.")
         else:
             # Pull latest changes (single-repo mode only)
             click.echo(f"Pulling latest changes on branch '{config.base_ws.branch}'...")

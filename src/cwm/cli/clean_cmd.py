@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 
+from cwm.cli.completion import complete_worktree_branches
 from cwm.cli.main import cli
 from cwm.core.config import Config
 from cwm.errors import CWMError, NotInSubshellError
@@ -17,12 +18,21 @@ ARTIFACT_DIRS = ("build", "install", "log")
 
 
 @cli.command()
+@click.option(
+    "-w", "--worktree",
+    "worktree_branch",
+    default=None,
+    metavar="BRANCH",
+    shell_complete=complete_worktree_branches,
+    help="Clean the given worktree without entering a subshell.",
+)
 @click.option("--all", "clean_all", is_flag=True, help="Clean all worktree workspaces.")
-@click.option("--base", "clean_base", is_flag=True, help="Also clean the base workspace.")
-def clean(clean_all: bool, clean_base: bool) -> None:
-    """Clean build artifacts (build/, install/, log/) for the current worktree.
+@click.option("--base", "clean_base", is_flag=True, help="Also clean the base workspace (only with --all).")
+def clean(worktree_branch: str | None, clean_all: bool, clean_base: bool) -> None:
+    """Clean build artifacts (build/, install/, log/).
 
-    Must be run inside a CWM subshell unless --all is specified.
+    Must be run inside a CWM subshell, or use -w/--worktree to specify a branch,
+    or use --all to clean every worktree at once.
     """
     try:
         root = find_project_root()
@@ -37,12 +47,15 @@ def clean(clean_all: bool, clean_base: bool) -> None:
                         targets.append((ws_dir.name, _artifact_dirs(ws_dir)))
             if clean_base:
                 targets.append(("base_ws", _artifact_dirs(config.base_ws_path)))
+        elif worktree_branch:
+            ws_path = config.worktree_ws_path(worktree_branch)
+            targets.append((worktree_branch, _artifact_dirs(ws_path)))
         else:
             branch = os.environ.get("CWM_WORKTREE")
             if not branch:
                 raise NotInSubshellError(
-                    "cwm clean requires a CWM subshell (use 'cwm enter <branch>').\n"
-                    "Or use --all to clean all worktrees."
+                    "cwm clean requires a CWM subshell (use 'cwm enter <branch>'),\n"
+                    "the -w/--worktree flag, or --all to clean every worktree."
                 )
             targets.append((branch, _artifact_dirs(config.worktree_ws_path(branch))))
 

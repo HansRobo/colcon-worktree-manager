@@ -31,6 +31,25 @@ def enter(branch: str) -> None:
                 f"Create it first with: cwm worktree add {branch}"
             )
 
+        base_setup = config.base_install_path / "setup.bash"
+        if not base_setup.exists():
+            click.echo(
+                click.style(
+                    "Warning: base workspace has not been built. Environment will be incomplete.\n"
+                    f"  Run: cd {config.base_ws_path} && colcon build --symlink-install",
+                    fg="yellow",
+                ),
+                err=True,
+            )
+        elif not (config.worktree_install_path(branch) / "local_setup.bash").exists():
+            click.echo(
+                click.style(
+                    f"Note: worktree '{branch}' has not been built yet. Run 'cwm build' after entering.",
+                    fg="cyan",
+                ),
+                err=True,
+            )
+
         rcfile = create_rcfile(
             branch=branch,
             worktree_ws=ws_path,

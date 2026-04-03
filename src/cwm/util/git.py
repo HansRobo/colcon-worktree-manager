@@ -9,6 +9,21 @@ from pathlib import Path
 from cwm.errors import GitError
 
 
+def _friendly_hint(stderr: str) -> str | None:
+    """Return a user-friendly hint for known git error patterns, or None."""
+    if "already checked out at" in stderr:
+        return (
+            "This branch is already used by another worktree.\n"
+            "  Remove the existing worktree first: cwm worktree rm <branch>\n"
+            "  Or use a different branch name."
+        )
+    if "invalid reference" in stderr or "not a valid branch" in stderr:
+        return "Branch not found. Check available branches with: git branch -a"
+    if "already exists" in stderr:
+        return "The worktree directory already exists. Remove it manually or use: cwm worktree prune"
+    return None
+
+
 def _run(
     args: list[str],
     *,
@@ -25,9 +40,11 @@ def _run(
             check=check,
         )
     except subprocess.CalledProcessError as exc:
-        raise GitError(
-            f"git {' '.join(args)} failed (rc={exc.returncode}): {exc.stderr.strip()}"
-        ) from exc
+        hint = _friendly_hint(exc.stderr)
+        msg = f"git {' '.join(args)} failed (rc={exc.returncode}): {exc.stderr.strip()}"
+        if hint:
+            msg += f"\n\nHint: {hint}"
+        raise GitError(msg) from exc
 
 
 # -- Repository queries -------------------------------------------------------
@@ -124,6 +141,33 @@ def branch_exists(branch: str, *, cwd: Path | None = None) -> bool:
 def pull(*, cwd: Path | None = None) -> None:
     """Run ``git pull`` in *cwd*."""
     _run(["pull"], cwd=cwd)
+
+
+def is_dirty(cwd: Path | None = None) -> bool:
+    """Return True if the working tree has uncommitted changes."""
+    result = _run(["status", "--porcelain"], cwd=cwd, check=False)
+    return bool(result.stdout.strip())
+
+
+def commits_ahead(base_ref: str, *, cwd: Path | None = None) -> int:
+    """Return number of commits HEAD is ahead of *base_ref*.
+
+    Returns 0 on error (e.g. base_ref not found).
+    """
+    result = _run(
+        ["rev-list", "--count", f"{base_ref}..HEAD"],
+        cwd=cwd,
+        check=False,
+    )
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        return 0
+
+
+def worktree_prune(cwd: Path | None = None) -> None:
+    """Run ``git worktree prune`` to remove stale worktree entries."""
+    _run(["worktree", "prune"], cwd=cwd)
 
 
 def worktree_add(

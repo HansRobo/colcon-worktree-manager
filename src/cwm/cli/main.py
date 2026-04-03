@@ -26,9 +26,10 @@ def base() -> None:
 # Import subcommands so they register with Click groups.
 # The imports are intentionally at the bottom to avoid circular dependencies.
 from cwm.cli.init_cmd import init  # noqa: E402, F401
-from cwm.cli.worktree_cmd import add, ls, rm  # noqa: E402, F401
+from cwm.cli.worktree_cmd import add, ls, prune, rebase, rm  # noqa: E402, F401
 from cwm.cli.focus_cmd import focus  # noqa: E402, F401
 from cwm.cli.build_cmd import build  # noqa: E402, F401
 from cwm.cli.enter_cmd import enter  # noqa: E402, F401
 from cwm.cli.base_cmd import update  # noqa: E402, F401
 from cwm.cli.clean_cmd import clean  # noqa: E402, F401
+from cwm.cli.status_cmd import status  # noqa: E402, F401

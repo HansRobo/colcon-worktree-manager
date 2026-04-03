@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 from cwm.core.config import BaseWorkspaceConfig, Config
-from cwm.errors import MetaModeRequiredError, WorktreeExistsError, WorktreeNotFoundError
+from cwm.errors import BranchNameCollisionError, GitError, MetaModeRequiredError, WorktreeExistsError, WorktreeNotFoundError
 from cwm.util import git
 from cwm.util.fs import ensure_dir
 
@@ -102,6 +102,15 @@ class WorktreeStateManager:
 
         Returns the workspace root path (worktrees/<branch>_ws/).
         """
+        # Detect branch name collision (e.g. feature/foo vs feature-foo → same directory)
+        safe_name = self._cfg.safe_branch_name(branch)
+        for existing in self.list_worktrees():
+            if existing.branch != branch and self._cfg.safe_branch_name(existing.branch) == safe_name:
+                raise BranchNameCollisionError(
+                    f"Branch '{branch}' conflicts with existing worktree '{existing.branch}' "
+                    f"(both map to '{safe_name}_ws'). Use a different branch name."
+                )
+
         if self._cfg.is_meta:
             if not sub_repos:
                 raise MetaModeRequiredError(
@@ -185,3 +194,56 @@ class WorktreeStateManager:
                 f"No metadata for worktree '{branch}'"
             )
         return WorktreeMeta.load(meta_path)
+
+    def prune_stale(self, branches: list[str] | None = None) -> list[str]:
+        """Remove metadata for worktrees whose workspace directory no longer exists.
+
+        If *branches* is provided, only those branches are pruned (skips the scan).
+        Also runs ``git worktree prune`` on the base repository to clean up stale
+        git worktree entries.  Returns the list of pruned branch names.
+        """
+        if branches is None:
+            branches = [
+                meta.branch for meta in self.list_worktrees()
+                if not self._cfg.worktree_ws_path(meta.branch).exists()
+            ]
+
+        for branch in branches:
+            self._cfg.worktree_meta_path(branch).unlink(missing_ok=True)
+
+        if self._cfg.base_src_path.exists():
+            try:
+                git.worktree_prune(cwd=self._cfg.base_src_path)
+            except GitError:
+                pass
+
+        return branches
+
+    def update_base_sha(self, branch: str) -> tuple[str, str]:
+        """Update the change-detection baseline SHA(s) for *branch* to the current merge-base.
+
+        Returns (old_sha, new_sha).  In meta mode each sub-repo SHA is updated.
+        """
+        meta_path = self._cfg.worktree_meta_path(branch)
+        if not meta_path.exists():
+            raise WorktreeNotFoundError(f"No metadata for worktree '{branch}'")
+        meta = WorktreeMeta.load(meta_path)
+
+        if meta.is_meta:
+            old_sha = next(iter(meta.sub_repo_shas.values()), meta.base_sha)
+            new_shas: dict[str, str] = {}
+            for rel in meta.sub_repos:
+                sub_src = self._cfg.base_src_path / rel
+                try:
+                    new_shas[rel] = git.get_head_sha(cwd=sub_src)
+                except GitError:
+                    new_shas[rel] = meta.sub_repo_shas.get(rel, "")
+            meta.sub_repo_shas = new_shas
+            new_sha = next(iter(new_shas.values()), old_sha)
+        else:
+            old_sha = meta.base_sha
+            new_sha = git.get_head_sha(cwd=self._cfg.base_src_path)
+            meta.base_sha = new_sha
+
+        meta.save(meta_path)
+        return old_sha, new_sha
