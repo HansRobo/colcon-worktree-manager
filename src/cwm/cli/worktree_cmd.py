@@ -55,7 +55,8 @@ def add(branch: str, repos: tuple[str, ...]) -> None:
                 "--repos is only valid in meta-repository mode (cwm init --meta)."
             )
 
-        ws_path = wsm.create_worktree(branch, sub_repos=list(repos) or None)
+        sub_repos = list(repos) or None
+        ws_path = wsm.create_worktree(branch, sub_repos=sub_repos)
         click.echo(f"Created worktree workspace: {ws_path}")
         click.echo(f"  Source:  {config.worktree_src_path(branch)}")
         click.echo(f"  Build:   {ws_path / 'build'}")
