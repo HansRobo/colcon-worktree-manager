@@ -84,6 +84,33 @@ class WorktreeInfo:
     branch: str | None  # None for detached HEAD
 
 
+def list_branches(*, cwd: Path | None = None, include_remote: bool = True) -> list[str]:
+    """Return a sorted, deduplicated list of local (and optionally remote) branch names."""
+    result = _run(
+        ["branch", "--format=%(refname:short)"],
+        cwd=cwd,
+        check=False,
+    )
+    branches: list[str] = [b.strip() for b in result.stdout.splitlines() if b.strip()]
+
+    if include_remote:
+        remote_result = _run(
+            ["branch", "-r", "--format=%(refname:short)"],
+            cwd=cwd,
+            check=False,
+        )
+        for line in remote_result.stdout.splitlines():
+            name = line.strip()
+            if not name or "->" in name:
+                continue
+            # Strip "origin/" prefix to get the short branch name
+            short = name.split("/", 1)[1] if "/" in name else name
+            if short not in branches:
+                branches.append(short)
+
+    return sorted(branches)
+
+
 def branch_exists(branch: str, *, cwd: Path | None = None) -> bool:
     """Check whether a local branch exists."""
     result = _run(

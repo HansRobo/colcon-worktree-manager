@@ -84,6 +84,49 @@ project/
         └── log/
 ```
 
+## Shell Completion
+
+`cwm` supports tab completion for subcommands, worktree branch names, sub-repository paths, and ROS 2 underlay paths.
+
+**Bash** — add to `~/.bashrc`:
+
+```bash
+eval "$(_CWM_COMPLETE=bash_source cwm)"
+```
+
+**Zsh** — add to `~/.zshrc`:
+
+```zsh
+eval "$(_CWM_COMPLETE=zsh_source cwm)"
+```
+
+**Fish** — save to `~/.config/fish/completions/cwm.fish`:
+
+```fish
+_CWM_COMPLETE=fish_source cwm | source
+```
+
+For faster shell startup, generate the completion script once:
+
+```bash
+_CWM_COMPLETE=bash_source cwm > ~/.cwm-complete.bash
+# then in ~/.bashrc:
+source ~/.cwm-complete.bash
+```
+
+What gets completed:
+
+| Argument / Option | Completion |
+|---|---|
+| `cwm worktree add BRANCH` | Local and remote git branch names |
+| `cwm worktree rm BRANCH` | Existing CWM worktree names |
+| `cwm worktree focus BRANCH` | Existing CWM worktree names |
+| `cwm worktree add --repos` | Sub-repository paths under `base_ws/src/` |
+| `cwm worktree focus --add` | Sub-repository paths under `base_ws/src/` |
+| `cwm worktree focus --rm` | Sub-repositories active in the worktree |
+| `cwm enter BRANCH` | Existing CWM worktree names |
+| `cwm init --underlay` | Detected ROS 2 distro paths (`/opt/ros/*`) |
+
 ## Development
 
 ```bash

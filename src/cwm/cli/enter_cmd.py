@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from cwm.cli.completion import complete_worktree_branches
 from cwm.cli.main import cli
 from cwm.core.config import Config
 from cwm.errors import CWMError
@@ -12,7 +13,7 @@ from cwm.util.shell import create_rcfile, exec_subshell
 
 
 @cli.command()
-@click.argument("branch")
+@click.argument("branch", shell_complete=complete_worktree_branches)
 def enter(branch: str) -> None:
     """Enter a sandboxed subshell for the BRANCH worktree.
 
