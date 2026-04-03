@@ -26,15 +26,27 @@ def update(no_build: bool) -> None:
         src_path = config.base_src_path
 
         if not src_path.exists():
+            if config.is_meta:
+                raise CWMError(
+                    f"Base workspace source not found: {src_path}\n"
+                    "Populate it with: vcs import base_ws/src < your.repos"
+                )
             raise CWMError(
                 f"Base workspace source not found: {src_path}\n"
                 "Clone your repository into base_ws/src/ first."
             )
 
-        # Pull latest changes
-        click.echo(f"Pulling latest changes on branch '{config.base_ws.branch}'...")
-        git.pull(cwd=src_path)
-        click.echo("  Pull complete.")
+        if config.is_meta:
+            click.echo("Meta-repository workspace detected.")
+            click.echo(
+                "  To update sub-repositories, run: vcs pull base_ws/src"
+            )
+            click.echo("  Then rebuild the base workspace.")
+        else:
+            # Pull latest changes (single-repo mode only)
+            click.echo(f"Pulling latest changes on branch '{config.base_ws.branch}'...")
+            git.pull(cwd=src_path)
+            click.echo("  Pull complete.")
 
         if no_build:
             click.echo("Skipping build (--no-build).")

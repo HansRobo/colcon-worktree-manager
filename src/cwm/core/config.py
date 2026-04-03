@@ -34,15 +34,21 @@ class Config:
     underlay: str = "/opt/ros/jazzy"
     base_ws: BaseWorkspaceConfig = field(default_factory=BaseWorkspaceConfig)
     worktrees_dir: str = "worktrees"
+    mode: str = "single"  # "single" or "meta"
 
     # Runtime-only (not serialised)
     project_root: Path = field(default=Path("."), repr=False)
+
+    @property
+    def is_meta(self) -> bool:
+        """Return True if this is a meta-repository workspace."""
+        return self.mode == "meta"
 
     # -- Serialisation ---------------------------------------------------------
 
     def to_dict(self) -> dict:
         """Serialise to a plain dict (excluding runtime fields)."""
-        return {
+        d: dict = {
             "version": self.version,
             "underlay": self.underlay,
             "base_ws": {
@@ -52,6 +58,9 @@ class Config:
             },
             "worktrees_dir": self.worktrees_dir,
         }
+        if self.mode != "single":
+            d["mode"] = self.mode
+        return d
 
     @classmethod
     def from_dict(cls, data: dict, project_root: Path) -> Config:
@@ -66,6 +75,7 @@ class Config:
                 symlink_install=bw.get("symlink_install", True),
             ),
             worktrees_dir=data.get("worktrees_dir", "worktrees"),
+            mode=data.get("mode", "single"),
             project_root=project_root,
         )
 

@@ -32,13 +32,48 @@ class ColconDiscoveryController:
         merge_base = git.get_merge_base("HEAD", self._base_branch, cwd=self._src)
         return git.diff_name_only(merge_base, cwd=self._src)
 
-    def get_changed_packages(self, dga: DependencyGraphAnalyzer) -> set[str]:
+    def get_changed_files_meta(
+        self,
+        sub_repos: list[str],
+        sub_repo_shas: dict[str, str],
+    ) -> list[str]:
+        """Return files changed across multiple sub-repositories.
+
+        For each sub-repo in *sub_repos*, runs ``git diff`` against the SHA
+        recorded at worktree creation time (*sub_repo_shas*).  File paths are
+        prefixed with the sub-repo's relative path so they match the layout of
+        the worktree ``src/`` directory.
+
+        Example return value::
+
+            ["core/autoware_core/pkg_a/src/main.cpp",
+             "core/autoware_core/pkg_b/include/foo.hpp"]
+        """
+        changed: list[str] = []
+        for rel in sub_repos:
+            sub_dir = self._src / rel
+            if not sub_dir.is_dir():
+                continue
+            base_sha = sub_repo_shas.get(rel, "HEAD~1")
+            files = git.diff_name_only(base_sha, cwd=sub_dir)
+            changed.extend(f"{rel}/{f}" for f in files)
+        return changed
+
+    def get_changed_packages(
+        self,
+        dga: DependencyGraphAnalyzer,
+        changed_files: list[str] | None = None,
+    ) -> set[str]:
         """Map changed files to the ROS packages that contain them.
 
         A file belongs to a package if it resides under that package's source
         directory (the directory containing ``package.xml``).
+
+        *changed_files* may be provided directly (e.g. from
+        :meth:`get_changed_files_meta`) to skip the default git-diff lookup.
         """
-        changed_files = self.get_changed_files()
+        if changed_files is None:
+            changed_files = self.get_changed_files()
         if not changed_files:
             return set()
 
