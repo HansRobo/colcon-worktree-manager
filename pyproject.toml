@@ -32,7 +32,7 @@ version-file = "src/cwm/_version.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-p", "no:launch_testing", "-p", "no:launch_pytest", "-p", "no:colcon_core"]
+addopts = ["-p", "no:launch_testing", "-p", "no:launch_pytest", "-p", "no:colcon_core", "-p", "no:launch_ros"]
 
 [dependency-groups]
 dev = [
