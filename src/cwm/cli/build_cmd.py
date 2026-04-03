@@ -37,7 +37,9 @@ def _require_subshell() -> tuple[str, Path]:
     is_flag=True,
     help="Skip reverse dependency analysis (unsafe, faster).",
 )
-@click.argument("colcon_args", nargs=-1, type=click.UNPROCESSED)
+# shell_complete suppresses Click's fallback to filesystem completion (compopt -o default),
+# which would otherwise surface the workspace's build/ directory as a tab-completion candidate.
+@click.argument("colcon_args", nargs=-1, type=click.UNPROCESSED, shell_complete=lambda ctx, param, incomplete: [])
 def build(dry_run: bool, no_rdeps: bool, colcon_args: tuple[str, ...]) -> None:
     """Build changed packages and their reverse dependencies.
 

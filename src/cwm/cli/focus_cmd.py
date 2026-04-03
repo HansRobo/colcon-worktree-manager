@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from cwm.cli.completion import complete_sub_repos, complete_worktree_branches, complete_worktree_sub_repos
 from cwm.cli.main import worktree
 from cwm.core.config import Config
 from cwm.core.meta_wsm import MetaWorkspaceManager
@@ -25,9 +26,9 @@ def _load_meta() -> tuple[Config, MetaWorkspaceManager]:
 
 
 @worktree.command("focus")
-@click.argument("branch")
-@click.option("--add", "add_repo", metavar="PATH", help="Add a sub-repository worktree.")
-@click.option("--rm", "rm_repo", metavar="PATH", help="Remove a sub-repository worktree.")
+@click.argument("branch", shell_complete=complete_worktree_branches)
+@click.option("--add", "add_repo", metavar="PATH", shell_complete=complete_sub_repos, help="Add a sub-repository worktree.")
+@click.option("--rm", "rm_repo", metavar="PATH", shell_complete=complete_worktree_sub_repos, help="Remove a sub-repository worktree.")
 @click.option("--list", "list_repos", is_flag=True, help="List active sub-repositories.")
 def focus(branch: str, add_repo: str | None, rm_repo: str | None, list_repos: bool) -> None:
     """Add, remove, or list sub-repository worktrees for BRANCH.

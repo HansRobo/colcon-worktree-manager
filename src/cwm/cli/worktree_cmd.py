@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from cwm.cli.completion import complete_git_branches, complete_sub_repos, complete_worktree_branches
 from cwm.cli.main import worktree
 from cwm.core.config import Config
 from cwm.core.wsm import WorktreeStateManager
@@ -19,12 +20,13 @@ def _load() -> tuple[Config, WorktreeStateManager]:
 
 
 @worktree.command()
-@click.argument("branch")
+@click.argument("branch", shell_complete=complete_git_branches)
 @click.option(
     "--repos",
     "repos",
     multiple=True,
     metavar="PATH",
+    shell_complete=complete_sub_repos,
     help=(
         "Sub-repository path (relative to base_ws/src/) to include as a git worktree. "
         "Required in meta mode. May be specified multiple times."
@@ -70,7 +72,7 @@ def add(branch: str, repos: tuple[str, ...]) -> None:
 
 
 @worktree.command("rm")
-@click.argument("branch")
+@click.argument("branch", shell_complete=complete_worktree_branches)
 @click.option("--force", is_flag=True, help="Force removal even with uncommitted changes.")
 def rm(branch: str, force: bool) -> None:
     """Remove the overlay worktree for BRANCH."""

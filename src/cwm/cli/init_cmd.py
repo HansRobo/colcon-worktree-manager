@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from cwm.cli.completion import complete_distros
 from cwm.cli.main import cli
 from cwm.core.config import CONFIG_DIR
 from cwm.core.wsm import WorktreeStateManager
@@ -17,6 +18,7 @@ from cwm.util.ros_env import ROS_INSTALL_BASE, detect_system_underlay, list_avai
 @click.option(
     "--underlay",
     default=None,
+    shell_complete=complete_distros,
     help="Path to an additional ROS 2 underlay (auto-detected if omitted).",
 )
 @click.option(

@@ -8,6 +8,23 @@ import tempfile
 from pathlib import Path
 
 
+def _bash_completion_script() -> str:
+    """Return the cwm bash completion script using Click's API directly.
+
+    Calling Click's BashComplete.source() avoids subprocess/PATH issues that arise
+    when the development version of cwm differs from the system-installed binary.
+    Embedding the script statically in the rcfile also avoids timing issues with
+    bash-completion resetting completions registered via eval at shell startup.
+    Returns an empty string if generation fails so the rcfile is still usable.
+    """
+    try:
+        from click.shell_completion import BashComplete
+        from cwm.cli.main import cli
+        return BashComplete(cli, {}, "cwm", "_CWM_COMPLETE").source()
+    except Exception:
+        return ""
+
+
 def create_rcfile(
     branch: str,
     worktree_ws: Path,
@@ -21,7 +38,8 @@ def create_rcfile(
     2. Sources the underlay's setup.bash to establish the base environment
     3. Exports CWM-specific environment variables
     4. Sets a modified PS1 prompt to indicate the active worktree
-    5. Registers a trap to delete itself on shell exit
+    5. Embeds the cwm bash completion script directly (no eval at shell startup)
+    6. Registers a trap to delete itself on shell exit
 
     Returns the path to the generated rcfile.
     """
@@ -34,6 +52,8 @@ def create_rcfile(
     q_underlay = shlex.quote(str(underlay_install))
     q_overlay = shlex.quote(str(overlay_install))
     q_rcpath = shlex.quote(rc_path)
+
+    completion_script = _bash_completion_script()
 
     rc_content = f"""\
 # CWM subshell rcfile - auto-generated, do not edit.
@@ -67,6 +87,10 @@ cd {q_ws}
 if [ -n "$PS1" ]; then
     export PS1="[cwm:{q_branch}] $PS1"
 fi
+
+# cwm shell completion - embedded at 'cwm enter' time so it is always active
+# regardless of bash-completion initialization order.
+{completion_script}
 
 echo ""
 echo "=== CWM Worktree: {q_branch} ==="
