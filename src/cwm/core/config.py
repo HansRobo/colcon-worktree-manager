@@ -31,7 +31,7 @@ class Config:
     """Top-level CWM configuration."""
 
     version: int = CONFIG_VERSION
-    underlay: str = "/opt/ros/jazzy"
+    underlay: str = ""
     base_ws: BaseWorkspaceConfig = field(default_factory=BaseWorkspaceConfig)
     worktrees_dir: str = "worktrees"
     mode: str = "single"  # "single" or "meta"

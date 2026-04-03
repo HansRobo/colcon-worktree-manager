@@ -58,7 +58,7 @@ class WorktreeStateManager:
     def init_project(
         project_root: Path,
         *,
-        underlay: str = "/opt/ros/jazzy",
+        underlay: str,
         base_branch: str = "main",
         meta: bool = False,
     ) -> Config:

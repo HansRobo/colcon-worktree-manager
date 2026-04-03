@@ -36,7 +36,7 @@ class TestConfigSerialization:
 class TestConfigDefaults:
     def test_default_underlay(self) -> None:
         config = Config()
-        assert config.underlay == "/opt/ros/jazzy"
+        assert config.underlay == ""
 
     def test_default_base_branch(self) -> None:
         config = Config()

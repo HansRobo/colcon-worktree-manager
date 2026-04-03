@@ -10,14 +10,14 @@ from cwm.cli.main import cli
 from cwm.core.config import CONFIG_DIR
 from cwm.core.wsm import WorktreeStateManager
 from cwm.util import git
+from cwm.util.ros_env import ROS_INSTALL_BASE, detect_system_underlay, list_available_distros
 
 
 @cli.command()
 @click.option(
     "--underlay",
-    default="/opt/ros/jazzy",
-    show_default=True,
-    help="Path to the ROS 2 underlay installation.",
+    default=None,
+    help="Path to an additional ROS 2 underlay (auto-detected if omitted).",
 )
 @click.option(
     "--base-branch",
@@ -40,6 +40,18 @@ def init(underlay: str, base_branch: str, meta: bool) -> None:
         raise click.ClickException(
             f"CWM project already initialised at {project_root}"
         )
+
+    if underlay is None:
+        available = list_available_distros()
+        detected = detect_system_underlay(available)
+        if detected is None:
+            if available:
+                hint = f"Found: {', '.join(available)}. Use --underlay to specify one."
+            else:
+                hint = f"No ROS 2 installation found under {ROS_INSTALL_BASE}. Use --underlay to specify the path."
+            raise click.ClickException(f"Could not auto-detect ROS 2 underlay. {hint}")
+        underlay = detected
+        click.echo(f"Auto-detected ROS 2 underlay: {underlay}")
 
     # Validate underlay
     underlay_path = Path(underlay)
