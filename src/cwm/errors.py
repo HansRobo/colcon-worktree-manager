@@ -37,9 +37,5 @@ class SubRepoNotFoundError(CWMError):
     """The specified sub-repository path does not exist or is not a git repository."""
 
 
-class MetaModeRequiredError(CWMError):
-    """This operation requires a meta-repository workspace (cwm init --meta)."""
-
-
 class BranchNameCollisionError(CWMError):
     """Branch name maps to the same directory as an existing worktree after sanitisation."""

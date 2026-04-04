@@ -42,7 +42,6 @@ def meta_project(tmp_path: Path) -> Config:
     config = Config(
         underlay="/opt/ros/jazzy",
         base_ws=BaseWorkspaceConfig(branch="main"),
-        mode="meta",
         project_root=project_root,
     )
 
@@ -88,7 +87,6 @@ class TestCreateWorktree:
 
         meta = WorktreeMeta.load(meta_project.worktree_meta_path("feature-fix"))
         assert meta.branch == "feature-fix"
-        assert meta.mode == "meta"
         assert "core/pkg_a" in meta.sub_repos
         assert "core/pkg_a" in meta.sub_repo_shas
 

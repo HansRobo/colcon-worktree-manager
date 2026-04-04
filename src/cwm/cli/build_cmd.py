@@ -80,13 +80,10 @@ def build(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_arg
         click.echo("Detecting changes...")
         cdc = ColconDiscoveryController(src_path, config.base_ws.branch)
 
-        if config.is_meta:
-            from cwm.core.wsm import WorktreeMeta
-            meta = WorktreeMeta.load(config.worktree_meta_path(branch))
-            changed_files = cdc.get_changed_files_meta(meta.sub_repos, meta.sub_repo_shas)
-            changed = cdc.get_changed_packages(dga, changed_files)
-        else:
-            changed = cdc.get_changed_packages(dga)
+        from cwm.core.wsm import WorktreeMeta
+        meta = WorktreeMeta.load(config.worktree_meta_path(branch))
+        changed_files = cdc.get_changed_files_meta(meta.sub_repos, meta.sub_repo_shas)
+        changed = cdc.get_changed_packages(dga, changed_files)
 
         if not changed:
             click.echo("No changed packages detected. Nothing to build.")

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
-
 import click
 
 from cwm.cli.main import base
@@ -29,34 +26,24 @@ def update(no_build: bool) -> None:
         src_path = config.base_src_path
 
         if not src_path.exists():
-            if config.is_meta:
-                raise CWMError(
-                    f"Base workspace source not found: {src_path}\n"
-                    "Populate it with: vcs import base_ws/src < your.repos"
-                )
             raise CWMError(
                 f"Base workspace source not found: {src_path}\n"
-                "Clone your repository into base_ws/src/ first."
+                "Clone your repositories into base_ws/src/ first."
             )
 
-        if config.is_meta:
-            vcs = shutil.which("vcs")
-            if vcs is None:
-                raise CWMError(
-                    "Meta-repository update requires the 'vcs' tool (vcstool).\n"
-                    "Install it with: pip install vcstool\n"
-                    "Then run: vcs pull base_ws/src"
-                )
-            click.echo("Pulling sub-repositories with vcs...")
-            result = subprocess.run([vcs, "pull", str(src_path)], check=False)
-            if result.returncode != 0:
-                raise CWMError(f"vcs pull failed with exit code {result.returncode}")
-            click.echo("  vcs pull complete.")
-        else:
-            # Pull latest changes (single-repo mode only)
-            click.echo(f"Pulling latest changes on branch '{config.base_ws.branch}'...")
-            git.pull(cwd=src_path)
-            click.echo("  Pull complete.")
+        from cwm.util.repos import discover_sub_repos
+        sub_repos = discover_sub_repos(src_path)
+        if not sub_repos:
+            raise CWMError(
+                f"No repositories found in {src_path}.\n"
+                "Clone your repositories into base_ws/src/ first."
+            )
+
+        click.echo("Pulling repositories...")
+        for rel, abs_path in sub_repos.items():
+            click.echo(f"  {rel}...")
+            git.pull(cwd=abs_path)
+        click.echo("  Pull complete.")
 
         if no_build:
             click.echo("Skipping build (--no-build).")

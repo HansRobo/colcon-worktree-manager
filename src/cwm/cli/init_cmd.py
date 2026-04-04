@@ -27,13 +27,7 @@ from cwm.util.ros_env import ROS_INSTALL_BASE, detect_system_underlay, list_avai
     show_default=True,
     help="Branch to use for the base workspace.",
 )
-@click.option(
-    "--meta",
-    is_flag=True,
-    default=False,
-    help="Initialise as a meta-repository workspace (e.g. Autoware).",
-)
-def init(underlay: str, base_branch: str, meta: bool) -> None:
+def init(underlay: str, base_branch: str) -> None:
     """Initialise a CWM project in the current directory."""
     project_root = Path.cwd().resolve()
 
@@ -70,11 +64,9 @@ def init(underlay: str, base_branch: str, meta: bool) -> None:
         project_root,
         underlay=underlay,
         base_branch=base_branch,
-        meta=meta,
     )
 
     click.echo(f"Initialised CWM project at {project_root}")
-    click.echo(f"  Mode:           {'meta' if meta else 'single'}")
     click.echo(f"  Underlay:       {config.underlay}")
     click.echo(f"  Base workspace: {config.base_ws_path}")
     click.echo(f"  Worktrees dir:  {config.worktrees_path}")
@@ -82,12 +74,6 @@ def init(underlay: str, base_branch: str, meta: bool) -> None:
         click.echo(f"  Git repository: {repo_root}")
     click.echo()
     click.echo("Next steps:")
-    if meta:
-        click.echo("  1. Populate base_ws/src/ with your sub-repositories:")
-        click.echo("       vcs import base_ws/src < repositories/autoware.repos")
-        click.echo("  2. Build the base workspace: cd base_ws && colcon build --symlink-install")
-        click.echo("  3. Create a worktree: cwm worktree add <branch> --repos <sub-repo-path>")
-    else:
-        click.echo("  1. Clone or symlink your ROS 2 source into base_ws/src/")
-        click.echo("  2. Build the base workspace: cd base_ws && colcon build --symlink-install")
-        click.echo("  3. Create a worktree: cwm worktree add <branch-name>")
+    click.echo("  1. Clone your repositories into base_ws/src/")
+    click.echo("  2. Build the base workspace: cd base_ws && colcon build --symlink-install")
+    click.echo("  3. Create a worktree: cwm worktree add <branch> [--repos <repo>]")

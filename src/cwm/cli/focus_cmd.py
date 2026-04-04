@@ -14,14 +14,9 @@ from cwm.util.fs import find_project_root
 
 
 def _load_meta() -> tuple[Config, MetaWorkspaceManager]:
-    """Load config and verify meta mode, returning a MetaWorkspaceManager."""
+    """Load config and create a MetaWorkspaceManager."""
     root = find_project_root()
     config = Config.load(root)
-    if not config.is_meta:
-        raise click.ClickException(
-            "'cwm worktree focus' is only available in meta-repository mode.\n"
-            "Initialise with: cwm init --meta"
-        )
     return config, MetaWorkspaceManager(config)
 
 

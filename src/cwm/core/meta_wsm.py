@@ -66,7 +66,6 @@ class MetaWorkspaceManager:
             branch=branch,
             created_at=datetime.now(timezone.utc).isoformat(),
             base_sha=meta_sha,
-            mode="meta",
             sub_repos=list(sub_repo_paths),
             sub_repo_shas=sub_repo_shas,
         )

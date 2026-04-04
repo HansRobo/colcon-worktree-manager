@@ -31,7 +31,7 @@ def _load() -> tuple[Config, WorktreeStateManager]:
     shell_complete=complete_sub_repos,
     help=(
         "Sub-repository path (relative to base_ws/src/) to include as a git worktree. "
-        "Required in meta mode. May be specified multiple times."
+        "May be specified multiple times. Auto-detected if omitted."
     ),
 )
 def add(branch: str, repos: tuple[str, ...]) -> None:
@@ -39,21 +39,23 @@ def add(branch: str, repos: tuple[str, ...]) -> None:
     try:
         config, wsm = _load()
 
-        if config.is_meta and not repos:
+        if not repos:
             from cwm.util.repos import discover_sub_repos
             available = sorted(discover_sub_repos(config.base_src_path))
             if not available:
                 raise click.ClickException(
-                    "No sub-repositories found in base_ws/src/.\n"
-                    "Populate it first: vcs import base_ws/src < your.repos"
+                    "No repositories found in base_ws/src/.\n"
+                    "Clone your repositories into base_ws/src/ first."
                 )
-            if sys.stdin.isatty():
-                click.echo("Available sub-repositories in base_ws/src/:")
+            if len(available) == 1:
+                repos = (available[0],)
+            elif sys.stdin.isatty():
+                click.echo("Available repositories in base_ws/src/:")
                 for i, rel in enumerate(available, 1):
                     click.echo(f"  [{i}] {rel}")
                 click.echo()
                 raw = click.prompt(
-                    "Select sub-repositories (comma-separated numbers, e.g. 1,3)"
+                    "Select repositories (comma-separated numbers, e.g. 1,3)"
                 )
                 selected: list[str] = []
                 for token in raw.split(","):
@@ -67,32 +69,26 @@ def add(branch: str, repos: tuple[str, ...]) -> None:
                     except ValueError:
                         raise click.ClickException(f"Invalid input: {token!r}")
                 if not selected:
-                    raise click.ClickException("No sub-repositories selected.")
+                    raise click.ClickException("No repositories selected.")
                 repos = tuple(selected)
             else:
-                click.echo("Available sub-repositories in base_ws/src/:", err=True)
+                click.echo("Available repositories in base_ws/src/:", err=True)
                 for rel in available:
                     click.echo(f"  {rel}", err=True)
                 click.echo(err=True)
                 raise click.ClickException(
-                    "Meta-repository mode requires --repos to specify which "
-                    "sub-repositories to work on.\n"
-                    "Example: cwm worktree add <branch> --repos core/autoware_core"
+                    "Multiple repositories found. Use --repos to specify which "
+                    "repositories to work on.\n"
+                    "Example: cwm worktree add <branch> --repos <repo-path>"
                 )
 
-        if not config.is_meta and repos:
-            raise click.ClickException(
-                "--repos is only valid in meta-repository mode (cwm init --meta)."
-            )
-
-        sub_repos = list(repos) or None
+        sub_repos = list(repos)
         ws_path = wsm.create_worktree(branch, sub_repos=sub_repos)
         click.echo(f"Created worktree workspace: {ws_path}")
         click.echo(f"  Source:  {config.worktree_src_path(branch)}")
         click.echo(f"  Build:   {ws_path / 'build'}")
         click.echo(f"  Install: {ws_path / 'install'}")
-        if sub_repos:
-            click.echo(f"  Sub-repos: {', '.join(sub_repos)}")
+        click.echo(f"  Repos:   {', '.join(sub_repos)}")
         click.echo()
         click.echo(f"Enter with: cwm enter {branch}")
     except CWMError as exc:
@@ -131,7 +127,7 @@ def ls() -> None:
             ws_path = config.worktree_ws_path(meta.branch)
             status = "exists" if ws_path.exists() else "missing"
             click.echo(f"  {meta.branch}  ({status})  created {meta.created_at}")
-            if meta.is_meta and meta.sub_repos:
+            if meta.sub_repos:
                 for rel in meta.sub_repos:
                     click.echo(f"    - {rel}")
     except CWMError as exc:

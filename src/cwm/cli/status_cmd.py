@@ -83,7 +83,7 @@ def _collect_worktrees(config: Config, wsm) -> list[dict]:
             "ahead": ahead,
             "created_at": meta.created_at,
         }
-        if meta.is_meta:
+        if meta.sub_repos:
             entry["sub_repos"] = meta.sub_repos
         result.append(entry)
     return result
