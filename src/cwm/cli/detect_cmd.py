@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import click
@@ -36,12 +37,15 @@ def detect(cwd: str | None) -> None:
         from cwm.util.repos import discover_sub_repos
         sub_repos = sorted(discover_sub_repos(config.base_src_path))
 
+    active_worktree = os.environ.get("CWM_WORKTREE")
+
     result = {
         "is_cwm": True,
         "project_root": str(root),
         "base_branch": config.base_ws.branch,
         "underlay": config.underlay,
         "sub_repos": sub_repos,
+        **({"active_worktree": active_worktree} if active_worktree else {}),
     }
 
     click.echo(json.dumps(result))

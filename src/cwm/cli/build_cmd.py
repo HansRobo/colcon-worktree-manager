@@ -12,7 +12,7 @@ from cwm.cli.main import cli
 from cwm.core.cdc import ColconDiscoveryController
 from cwm.core.config import Config
 from cwm.core.dga import DependencyGraphAnalyzer
-from cwm.errors import CWMError, NotInSubshellError
+from cwm.errors import CWMError, NotActivatedError
 from cwm.util.colcon_runner import run_colcon_build, run_colcon_build_sourced
 from cwm.util.fs import find_project_root
 
@@ -37,9 +37,10 @@ def _resolve_worktree(worktree_branch: str | None) -> tuple[str, Path, Config]:
     branch = os.environ.get("CWM_WORKTREE")
     ws_str = os.environ.get("CWM_WORKSPACE")
     if not branch or not ws_str:
-        raise NotInSubshellError(
-            "cwm build requires either a CWM subshell (cwm enter <branch>) "
-            "or the -w/--worktree flag."
+        raise NotActivatedError(
+            "cwm build requires an active CWM workspace or the -w/--worktree flag.\n"
+            "  Activate:  source <(cwm activate <branch>)\n"
+            "  Or:        cwm build -w <branch>"
         )
     return branch, Path(ws_str), config
 
@@ -65,8 +66,8 @@ def _resolve_worktree(worktree_branch: str | None) -> tuple[str, Path, Config]:
 def build(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_args: tuple[str, ...]) -> None:
     """Build changed packages and their reverse dependencies.
 
-    Must be run inside a CWM subshell (cwm enter) or with -w/--worktree.
-    Any extra arguments after ``--`` are forwarded to colcon build.
+    Must be run with an active workspace (source <(cwm activate <branch>))
+    or with -w/--worktree. Any extra arguments after ``--`` are forwarded to colcon build.
     """
     try:
         branch, ws_path, config = _resolve_worktree(worktree_branch)

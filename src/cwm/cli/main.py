@@ -67,7 +67,8 @@ from cwm.cli.init_cmd import init  # noqa: E402, F401
 from cwm.cli.worktree_cmd import add, ls, prune, rebase, rm  # noqa: E402, F401
 from cwm.cli.focus_cmd import focus  # noqa: E402, F401
 from cwm.cli.build_cmd import build  # noqa: E402, F401
-from cwm.cli.enter_cmd import enter  # noqa: E402, F401
+from cwm.cli.activate_cmd import activate  # noqa: E402, F401
+from cwm.cli.shell_init_cmd import shell_init  # noqa: E402, F401
 from cwm.cli.base_cmd import update  # noqa: E402, F401
 from cwm.cli.clean_cmd import clean  # noqa: E402, F401
 from cwm.cli.status_cmd import status  # noqa: E402, F401
