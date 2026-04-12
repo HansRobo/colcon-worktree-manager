@@ -71,3 +71,5 @@ from cwm.cli.enter_cmd import enter  # noqa: E402, F401
 from cwm.cli.base_cmd import update  # noqa: E402, F401
 from cwm.cli.clean_cmd import clean  # noqa: E402, F401
 from cwm.cli.status_cmd import status  # noqa: E402, F401
+from cwm.cli.env_cmd import env  # noqa: E402, F401
+from cwm.cli.detect_cmd import detect  # noqa: E402, F401

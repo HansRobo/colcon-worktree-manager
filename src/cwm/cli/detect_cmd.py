@@ -1,0 +1,47 @@
+"""cwm detect - detect CWM project and output workspace information."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import click
+
+from cwm.cli.main import cli
+from cwm.core.config import Config
+from cwm.errors import ConfigNotFoundError
+from cwm.util.fs import find_project_root
+
+
+@cli.command()
+@click.option("--cwd", default=None, type=click.Path(exists=True), help="Directory to search from (default: current directory).")
+def detect(cwd: str | None) -> None:
+    """Detect whether the current directory is inside a CWM project.
+
+    Outputs project information as JSON for programmatic use by
+    external tools such as Kanban.
+    """
+    start = Path(cwd) if cwd else None
+
+    try:
+        root = find_project_root(start)
+        config = Config.load(root)
+    except ConfigNotFoundError:
+        click.echo(json.dumps({"is_cwm": False}))
+        return
+
+    # Discover available sub-repos
+    sub_repos: list[str] = []
+    if config.base_src_path.exists():
+        from cwm.util.repos import discover_sub_repos
+        sub_repos = sorted(discover_sub_repos(config.base_src_path))
+
+    result = {
+        "is_cwm": True,
+        "project_root": str(root),
+        "base_branch": config.base_ws.branch,
+        "underlay": config.underlay,
+        "sub_repos": sub_repos,
+    }
+
+    click.echo(json.dumps(result))
