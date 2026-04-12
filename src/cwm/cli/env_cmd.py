@@ -48,6 +48,7 @@ def env(branch: str) -> None:
 
         result = {
             "CWM_ACTIVE": "1",
+            "CWM_PROJECT_ROOT": str(root),
             "CWM_WORKTREE": branch,
             "CWM_WORKSPACE": str(ws_path),
             "source_scripts": source_scripts,

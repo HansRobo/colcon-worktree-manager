@@ -17,8 +17,8 @@ class WorktreeNotFoundError(CWMError):
     """The named worktree does not exist."""
 
 
-class NotInSubshellError(CWMError):
-    """Command requires being inside a CWM subshell (use 'cwm enter' first)."""
+class NotActivatedError(CWMError):
+    """Command requires an active CWM workspace (run 'cwm activate <branch>' first)."""
 
 
 class GitError(CWMError):
