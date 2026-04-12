@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sys
+from typing import Any, NoReturn
 
 import click
 
@@ -21,6 +23,15 @@ def _load() -> tuple[Config, WorktreeStateManager]:
     return config, WorktreeStateManager(config)
 
 
+def _json_fail(msg: str) -> NoReturn:
+    click.echo(json.dumps({"ok": False, "error": msg}))
+    raise SystemExit(1)
+
+
+def _json_ok(payload: dict[str, Any]) -> None:
+    click.echo(json.dumps({"ok": True, **payload}))
+
+
 @worktree.command()
 @click.argument("branch", shell_complete=complete_git_branches)
 @click.option(
@@ -34,22 +45,33 @@ def _load() -> tuple[Config, WorktreeStateManager]:
         "May be specified multiple times. Auto-detected if omitted."
     ),
 )
-def add(branch: str, repos: tuple[str, ...]) -> None:
+@click.option("--all-repos", is_flag=True, help="Automatically select all repositories in base_ws/src/.")
+@click.option("--json", "as_json", is_flag=True, help="Output result as JSON.")
+def add(branch: str, repos: tuple[str, ...], all_repos: bool, as_json: bool) -> None:
     """Create a new overlay worktree for BRANCH."""
     try:
         config, wsm = _load()
+
+        if repos and all_repos:
+            msg = "--repos and --all-repos are mutually exclusive."
+            if as_json:
+                _json_fail(msg)
+            raise click.ClickException(msg)
 
         if not repos:
             from cwm.util.repos import discover_sub_repos
             available = sorted(discover_sub_repos(config.base_src_path))
             if not available:
-                raise click.ClickException(
+                msg = (
                     "No repositories found in base_ws/src/.\n"
                     "Clone your repositories into base_ws/src/ first."
                 )
-            if len(available) == 1:
-                repos = (available[0],)
-            elif sys.stdin.isatty():
+                if as_json:
+                    _json_fail(msg)
+                raise click.ClickException(msg)
+            if len(available) == 1 or all_repos:
+                repos = tuple(available)
+            elif sys.stdin.isatty() and not as_json:
                 click.echo("Available repositories in base_ws/src/:")
                 for i, rel in enumerate(available, 1):
                     click.echo(f"  [{i}] {rel}")
@@ -72,54 +94,92 @@ def add(branch: str, repos: tuple[str, ...]) -> None:
                     raise click.ClickException("No repositories selected.")
                 repos = tuple(selected)
             else:
+                msg = (
+                    "Multiple repositories found. Use --repos to specify which "
+                    "repositories to work on, or --all-repos to select all.\n"
+                    "Example: cwm worktree add <branch> --repos <repo-path>"
+                )
+                if as_json:
+                    _json_fail(msg)
                 click.echo("Available repositories in base_ws/src/:", err=True)
                 for rel in available:
                     click.echo(f"  {rel}", err=True)
                 click.echo(err=True)
-                raise click.ClickException(
-                    "Multiple repositories found. Use --repos to specify which "
-                    "repositories to work on.\n"
-                    "Example: cwm worktree add <branch> --repos <repo-path>"
-                )
+                raise click.ClickException(msg)
 
         sub_repos = list(repos)
         ws_path = wsm.create_worktree(branch, sub_repos=sub_repos)
-        click.echo(f"Created worktree workspace: {ws_path}")
-        click.echo(f"  Source:  {config.worktree_src_path(branch)}")
-        click.echo(f"  Build:   {ws_path / 'build'}")
-        click.echo(f"  Install: {ws_path / 'install'}")
-        click.echo(f"  Repos:   {', '.join(sub_repos)}")
-        click.echo()
-        click.echo(f"Enter with: cwm enter {branch}")
+
+        if as_json:
+            _json_ok({
+                "branch": branch,
+                "ws_path": str(ws_path),
+                "src_path": str(config.worktree_src_path(branch)),
+                "sub_repos": sub_repos,
+            })
+        else:
+            click.echo(f"Created worktree workspace: {ws_path}")
+            click.echo(f"  Source:  {config.worktree_src_path(branch)}")
+            click.echo(f"  Build:   {ws_path / 'build'}")
+            click.echo(f"  Install: {ws_path / 'install'}")
+            click.echo(f"  Repos:   {', '.join(sub_repos)}")
+            click.echo()
+            click.echo(f"Enter with: cwm enter {branch}")
     except CWMError as exc:
+        if as_json:
+            _json_fail(str(exc))
         raise click.ClickException(str(exc)) from exc
 
 
 @worktree.command("rm")
 @click.argument("branch", shell_complete=complete_worktree_branches)
 @click.option("--force", is_flag=True, help="Force removal even with uncommitted changes. Skips confirmation.")
-def rm(branch: str, force: bool) -> None:
+@click.option("--json", "as_json", is_flag=True, help="Output result as JSON.")
+def rm(branch: str, force: bool, as_json: bool) -> None:
     """Remove the overlay worktree for BRANCH."""
     try:
         config, wsm = _load()
-        if not force:
+        if not force and not as_json:
             ws_path = config.worktree_ws_path(branch)
             click.echo("This will permanently remove:")
             click.echo(f"  Branch:    {branch}")
             click.echo(f"  Workspace: {ws_path}")
             click.confirm("Continue?", abort=True)
         wsm.remove_worktree(branch, force=force)
-        click.echo(f"Removed worktree: {branch}")
+
+        if as_json:
+            _json_ok({"branch": branch})
+        else:
+            click.echo(f"Removed worktree: {branch}")
     except CWMError as exc:
+        if as_json:
+            _json_fail(str(exc))
         raise click.ClickException(str(exc)) from exc
 
 
 @worktree.command("list")
-def ls() -> None:
+@click.option("--json", "as_json", is_flag=True, help="Output result as JSON.")
+def ls(as_json: bool) -> None:
     """List all managed worktrees."""
     try:
         config, wsm = _load()
         metas = wsm.list_worktrees()
+
+        if as_json:
+            worktrees = []
+            for meta in metas:
+                ws_path = config.worktree_ws_path(meta.branch)
+                worktrees.append({
+                    "branch": meta.branch,
+                    "ws_path": str(ws_path),
+                    "exists": ws_path.exists(),
+                    "sub_repos": meta.sub_repos,
+                    "created_at": meta.created_at,
+                    "base_sha": meta.base_sha,
+                })
+            _json_ok({"worktrees": worktrees})
+            return
+
         if not metas:
             click.echo("No worktrees. Create one with: cwm worktree add <branch>")
             return
@@ -131,6 +191,8 @@ def ls() -> None:
                 for rel in meta.sub_repos:
                     click.echo(f"    - {rel}")
     except CWMError as exc:
+        if as_json:
+            _json_fail(str(exc))
         raise click.ClickException(str(exc)) from exc
 
 
