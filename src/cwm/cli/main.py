@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import click
 
 from cwm import __version__
+from cwm.errors import CWMError, NotActivatedError
+from cwm.util.colcon_runner import run_colcon
 
 
 class HelpfulCommand(click.Command):
@@ -35,6 +40,12 @@ class HelpfulGroup(click.Group):
             click.secho(f"Error: {e.format_message()}", fg="red", err=True)
             ctx.exit(2)
 
+    def get_command(self, ctx: click.Context, name: str) -> click.BaseCommand | None:
+        cmd = super().get_command(ctx, name)
+        if cmd is not None:
+            return cmd
+        return _make_colcon_passthrough(name)
+
     def resolve_command(self, ctx: click.Context, args: list[str]):
         try:
             return super().resolve_command(ctx, args)
@@ -43,6 +54,34 @@ class HelpfulGroup(click.Group):
             click.echo(err=True)
             click.secho(f"Error: {e.format_message()}", fg="red", err=True)
             ctx.exit(2)
+
+
+def _make_colcon_passthrough(verb: str) -> click.Command:
+    """Return a Click command that forwards ``cwm <verb> [args...]`` to ``colcon <verb> [args...]``.
+
+    The workspace is taken from the active CWM environment variables set by
+    ``cwm activate``.  Raises NotActivatedError when no workspace is active.
+    """
+
+    @click.command(
+        name=verb,
+        context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+        help=f"Forward to ``colcon {verb}`` in the active worktree workspace.",
+    )
+    @click.argument("colcon_args", nargs=-1, type=click.UNPROCESSED)
+    def _passthrough(colcon_args: tuple[str, ...]) -> None:
+        try:
+            ws_str = os.environ.get("CWM_WORKSPACE")
+            if not ws_str:
+                raise NotActivatedError(
+                    f"cwm {verb} requires an active CWM workspace.\n"
+                    "  Activate:  source <(cwm activate <branch>)"
+                )
+            run_colcon(verb, Path(ws_str), list(colcon_args))
+        except CWMError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    return _passthrough
 
 
 @click.group(cls=HelpfulGroup)

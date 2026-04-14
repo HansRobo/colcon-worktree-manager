@@ -45,7 +45,7 @@ def _resolve_worktree(worktree_branch: str | None) -> tuple[str, Path, Config]:
     return branch, Path(ws_str), config
 
 
-@cli.command()
+@cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.option(
     "-w", "--worktree",
     "worktree_branch",

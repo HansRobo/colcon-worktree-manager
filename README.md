@@ -60,6 +60,24 @@ deactivate
 | `cwm build [--dry-run] [--no-rdeps]` | Build changed packages + reverse deps |
 | `cwm clean [--all]` | Clean build artifacts |
 
+### colcon passthrough
+
+After activation, `cwm` acts as a drop-in replacement for `colcon`.  Any flags
+not recognised by `cwm build` are forwarded to colcon, and any colcon verb not
+defined by cwm is run verbatim in the active worktree workspace:
+
+```bash
+source <(cwm activate feature-perception)
+
+# Smart diff-based build; extra flags forwarded to colcon
+cwm build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+# Run tests, list packages, inspect the graph — any colcon verb works
+cwm test --packages-select my_pkg
+cwm list
+cwm graph
+```
+
 ## Architecture
 
 CWM consists of three core modules:
