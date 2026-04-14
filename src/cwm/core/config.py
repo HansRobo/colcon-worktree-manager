@@ -7,23 +7,14 @@ from pathlib import Path
 
 import yaml
 
-from cwm.errors import ConfigNotFoundError
+from cwm.errors import ConfigNotFoundError, ConfigVersionError
 
 CONFIG_DIR = ".cwm"
 CONFIG_FILE = "config.yaml"
 WORKTREES_META_DIR = "worktrees"
 CACHE_DIR = "cache"
 
-CONFIG_VERSION = 1
-
-
-@dataclass
-class BaseWorkspaceConfig:
-    """Configuration for the base (underlay) workspace."""
-
-    path: str = "base_ws"
-    branch: str = "main"
-    symlink_install: bool = True
+CONFIG_VERSION = 2
 
 
 @dataclass
@@ -32,7 +23,7 @@ class Config:
 
     version: int = CONFIG_VERSION
     underlay: str = ""
-    base_ws: BaseWorkspaceConfig = field(default_factory=BaseWorkspaceConfig)
+    symlink_install: bool = True
     worktrees_dir: str = "worktrees"
 
     # Runtime-only (not serialised)
@@ -45,26 +36,17 @@ class Config:
         return {
             "version": self.version,
             "underlay": self.underlay,
-            "base_ws": {
-                "path": self.base_ws.path,
-                "branch": self.base_ws.branch,
-                "symlink_install": self.base_ws.symlink_install,
-            },
+            "symlink_install": self.symlink_install,
             "worktrees_dir": self.worktrees_dir,
         }
 
     @classmethod
     def from_dict(cls, data: dict, project_root: Path) -> Config:
         """Deserialise from a plain dict."""
-        bw = data.get("base_ws", {})
         return cls(
             version=data.get("version", CONFIG_VERSION),
             underlay=data.get("underlay", "/opt/ros/jazzy"),
-            base_ws=BaseWorkspaceConfig(
-                path=bw.get("path", "base_ws"),
-                branch=bw.get("branch", "main"),
-                symlink_install=bw.get("symlink_install", True),
-            ),
+            symlink_install=data.get("symlink_install", True),
             worktrees_dir=data.get("worktrees_dir", "worktrees"),
             project_root=project_root,
         )
@@ -86,6 +68,15 @@ class Config:
             raise ConfigNotFoundError(f"Config not found: {config_path}")
         with open(config_path) as fh:
             data = yaml.safe_load(fh) or {}
+
+        version = data.get("version", 1)
+        if version < CONFIG_VERSION:
+            raise ConfigVersionError(
+                f"CWM config at {config_path} uses version {version} (current: {CONFIG_VERSION}).\n"
+                "The workspace layout has changed: the project root is now the base workspace.\n"
+                "Please re-initialise with: cwm init"
+            )
+
         return cls.from_dict(data, project_root)
 
     # -- Derived paths ---------------------------------------------------------
@@ -95,16 +86,12 @@ class Config:
         return self.project_root / CONFIG_DIR
 
     @property
-    def base_ws_path(self) -> Path:
-        return self.project_root / self.base_ws.path
-
-    @property
     def base_src_path(self) -> Path:
-        return self.base_ws_path / "src"
+        return self.project_root / "src"
 
     @property
     def base_install_path(self) -> Path:
-        return self.base_ws_path / "install"
+        return self.project_root / "install"
 
     @property
     def worktrees_path(self) -> Path:

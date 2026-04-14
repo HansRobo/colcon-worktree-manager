@@ -54,5 +54,5 @@ def validate_sub_repo_paths(src_path: Path, paths: list[str]) -> None:
         if not candidate.is_dir() or not is_git_repo(candidate):
             raise SubRepoNotFoundError(
                 f"Sub-repository not found or not a git repo: {candidate}\n"
-                "Run 'vcs import base_ws/src < your.repos' to populate the base workspace."
+                "Run 'vcs import src < your.repos' to populate the workspace."
             )

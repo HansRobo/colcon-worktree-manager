@@ -53,7 +53,7 @@ def complete_git_branches(
         from cwm.util.git import list_branches
 
         config, _ = _load_config_and_wsm()
-        return _match(list_branches(cwd=config.base_ws_path, include_remote=True), incomplete)
+        return _match(list_branches(cwd=config.project_root, include_remote=True), incomplete)
     except Exception:
         return []
 

@@ -41,11 +41,11 @@ def _json_ok(payload: dict[str, Any]) -> None:
     metavar="PATH",
     shell_complete=complete_sub_repos,
     help=(
-        "Sub-repository path (relative to base_ws/src/) to include as a git worktree. "
+        "Sub-repository path (relative to src/) to include as a git worktree. "
         "May be specified multiple times. Auto-detected if omitted."
     ),
 )
-@click.option("--all-repos", is_flag=True, help="Automatically select all repositories in base_ws/src/.")
+@click.option("--all-repos", is_flag=True, help="Automatically select all repositories in src/.")
 @click.option("--json", "as_json", is_flag=True, help="Output result as JSON.")
 def add(branch: str, repos: tuple[str, ...], all_repos: bool, as_json: bool) -> None:
     """Create a new overlay worktree for BRANCH."""
@@ -63,8 +63,8 @@ def add(branch: str, repos: tuple[str, ...], all_repos: bool, as_json: bool) -> 
             available = sorted(discover_sub_repos(config.base_src_path))
             if not available:
                 msg = (
-                    "No repositories found in base_ws/src/.\n"
-                    "Clone your repositories into base_ws/src/ first."
+                    "No repositories found in src/.\n"
+                    "Clone your repositories into src/ first."
                 )
                 if as_json:
                     _json_fail(msg)
@@ -72,7 +72,7 @@ def add(branch: str, repos: tuple[str, ...], all_repos: bool, as_json: bool) -> 
             if len(available) == 1 or all_repos:
                 repos = tuple(available)
             elif sys.stdin.isatty() and not as_json:
-                click.echo("Available repositories in base_ws/src/:")
+                click.echo("Available repositories in src/:")
                 for i, rel in enumerate(available, 1):
                     click.echo(f"  [{i}] {rel}")
                 click.echo()
@@ -101,7 +101,7 @@ def add(branch: str, repos: tuple[str, ...], all_repos: bool, as_json: bool) -> 
                 )
                 if as_json:
                     _json_fail(msg)
-                click.echo("Available repositories in base_ws/src/:", err=True)
+                click.echo("Available repositories in src/:", err=True)
                 for rel in available:
                     click.echo(f"  {rel}", err=True)
                 click.echo(err=True)
@@ -124,7 +124,7 @@ def add(branch: str, repos: tuple[str, ...], all_repos: bool, as_json: bool) -> 
             click.echo(f"  Install: {ws_path / 'install'}")
             click.echo(f"  Repos:   {', '.join(sub_repos)}")
             click.echo()
-            click.echo(f"Enter with: cwm enter {branch}")
+            click.echo(f"Activate with: source <(cwm activate {branch})")
     except CWMError as exc:
         if as_json:
             _json_fail(str(exc))

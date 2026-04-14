@@ -6,7 +6,7 @@ A CLI tool that integrates `git worktree` with `colcon` for parallel ROS 2 devel
 
 - **Smart diff-based builds** - Automatically detects changed packages via `git diff` and builds only what's needed
 - **ABI-safe reverse dependency resolution** - Computes and rebuilds affected packages to prevent ODR violations and runtime crashes
-- **Environment sandboxing** - Launches isolated subshells per worktree to prevent `AMENT_PREFIX_PATH` pollution
+- **Environment isolation** - Activates per-worktree environment (ROS overlays, `AMENT_PREFIX_PATH`) via `cwm activate` / `deactivate`
 - **Optimised colcon arguments** - Generates `--packages-select` and `--allow-overriding` flags automatically
 
 ## Installation
@@ -19,30 +19,31 @@ pip install .
 
 ## Quick Start
 
+### Adopting an existing workspace
+
+If you already have a colcon workspace (e.g. `~/ws/ibis_ws` with `src/` populated):
+
 ```bash
-# 1. Initialise CWM in your project directory (ROS 2 underlay is auto-detected)
-cwm init
-
-# Or specify a custom underlay if needed
-# cwm init --underlay /path/to/custom_ws
-
-# 2. Clone your ROS 2 source into base_ws/src/
-git clone <your-repo> base_ws/src/
-
-# 3. Build the base workspace
-cd base_ws && colcon build --symlink-install && cd ..
-
-# 4. Create a worktree for a feature branch
+cd ~/ws/ibis_ws
+cwm init          # ROS 2 underlay is auto-detected
 cwm worktree add feature-perception
-
-# 5. Enter the sandboxed environment
-cwm enter feature-perception
-
-# 6. Edit code, then build only changed packages + reverse deps
+source <(cwm activate feature-perception)
 cwm build
+deactivate
+```
 
-# 7. Exit when done (environment is fully restored)
-exit
+### Starting fresh
+
+```bash
+mkdir my_ws && cd my_ws
+cwm init          # creates .cwm/ and worktrees/ only
+mkdir src
+git clone <your-repo> src/
+colcon build --symlink-install
+cwm worktree add feature-perception
+source <(cwm activate feature-perception)
+cwm build
+deactivate
 ```
 
 ## Commands
@@ -54,7 +55,8 @@ exit
 | `cwm worktree add <branch>` | Create a new overlay worktree |
 | `cwm worktree rm <branch>` | Remove a worktree and its artifacts |
 | `cwm worktree list` | List all managed worktrees |
-| `cwm enter <branch>` | Enter a sandboxed subshell |
+| `source <(cwm activate [branch])` | Activate a worktree environment (or interactive menu) |
+| `deactivate` | Restore the previous environment |
 | `cwm build [--dry-run] [--no-rdeps]` | Build changed packages + reverse deps |
 | `cwm clean [--all]` | Clean build artifacts |
 
@@ -68,17 +70,18 @@ CWM consists of three core modules:
 
 ### Directory Structure
 
+CWM treats the workspace root itself as the base workspace — matching standard colcon conventions:
+
 ```
-project/
+my_ws/                 # project root = base colcon workspace
 ├── .cwm/              # CWM metadata and config
-├── base_ws/           # Underlay (main branch, full build)
-│   ├── src/
-│   ├── build/
-│   ├── install/
-│   └── log/
-└── worktrees/         # Overlay worktrees
+├── src/               # base source tree (existing or cloned by you)
+├── build/
+├── install/
+├── log/
+└── worktrees/         # overlay worktrees (created by cwm worktree add)
     └── feature-X_ws/
-        ├── src/       # git worktree checkout
+        ├── src/       # git worktree checkouts
         ├── build/
         ├── install/
         └── log/
@@ -121,10 +124,10 @@ What gets completed:
 | `cwm worktree add BRANCH` | Local and remote git branch names |
 | `cwm worktree rm BRANCH` | Existing CWM worktree names |
 | `cwm worktree focus BRANCH` | Existing CWM worktree names |
-| `cwm worktree add --repos` | Sub-repository paths under `base_ws/src/` |
-| `cwm worktree focus --add` | Sub-repository paths under `base_ws/src/` |
+| `cwm worktree add --repos` | Sub-repository paths under `src/` |
+| `cwm worktree focus --add` | Sub-repository paths under `src/` |
 | `cwm worktree focus --rm` | Sub-repositories active in the worktree |
-| `cwm enter BRANCH` | Existing CWM worktree names |
+| `cwm activate BRANCH` | Existing CWM worktree names |
 | `cwm init --underlay` | Detected ROS 2 distro paths (`/opt/ros/*`) |
 
 ## Development

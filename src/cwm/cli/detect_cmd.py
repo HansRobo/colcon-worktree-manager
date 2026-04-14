@@ -10,7 +10,7 @@ import click
 
 from cwm.cli.main import cli
 from cwm.core.config import Config
-from cwm.errors import ConfigNotFoundError
+from cwm.errors import ConfigNotFoundError, ConfigVersionError
 from cwm.util.fs import find_project_root
 
 
@@ -27,6 +27,8 @@ def detect(cwd: str | None) -> None:
     try:
         root = find_project_root(start)
         config = Config.load(root)
+    except ConfigVersionError as exc:
+        raise click.ClickException(str(exc)) from exc
     except ConfigNotFoundError:
         click.echo(json.dumps({"is_cwm": False}))
         return
@@ -42,7 +44,6 @@ def detect(cwd: str | None) -> None:
     result = {
         "is_cwm": True,
         "project_root": str(root),
-        "base_branch": config.base_ws.branch,
         "underlay": config.underlay,
         "sub_repos": sub_repos,
         **({"active_worktree": active_worktree} if active_worktree else {}),

@@ -2,11 +2,29 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+# Minimal git identity for subprocess calls in tests
+GIT_ENV = {
+    **os.environ,
+    "GIT_AUTHOR_NAME": "Test",
+    "GIT_AUTHOR_EMAIL": "t@t.com",
+    "GIT_COMMITTER_NAME": "Test",
+    "GIT_COMMITTER_EMAIL": "t@t.com",
+}
+
+
+def make_git_repo(path: Path, branch: str = "main") -> None:
+    """Initialise a bare git repo with one empty commit at *path*."""
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-b", branch], cwd=path, check=True, capture_output=True, env=GIT_ENV)
+    subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=path, check=True, capture_output=True, env=GIT_ENV)
 
 
 @pytest.fixture

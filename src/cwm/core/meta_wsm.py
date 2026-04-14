@@ -54,8 +54,13 @@ class MetaWorkspaceManager:
         ensure_dir(ws_path / "src")
 
         sub_repo_shas: dict[str, str] = {}
+        sub_repo_branches: dict[str, str] = {}
         for rel in sub_repo_paths:
             self._add_sub_repo_worktree(branch, rel, sub_repo_shas)
+            try:
+                sub_repo_branches[rel] = git.get_current_branch(cwd=base_src / rel)
+            except GitError:
+                pass
 
         try:
             meta_sha = git.get_head_sha(cwd=self._cfg.project_root)
@@ -68,6 +73,7 @@ class MetaWorkspaceManager:
             base_sha=meta_sha,
             sub_repos=list(sub_repo_paths),
             sub_repo_shas=sub_repo_shas,
+            sub_repo_branches=sub_repo_branches,
         )
         meta.save(self._cfg.worktree_meta_path(branch))
         return ws_path
