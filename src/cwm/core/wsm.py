@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from cwm.core.config import BaseWorkspaceConfig, Config
+from cwm.core.config import Config
 from cwm.errors import BranchNameCollisionError, GitError, WorktreeNotFoundError
 from cwm.util import git
 from cwm.util.fs import ensure_dir
@@ -22,6 +22,7 @@ class WorktreeMeta:
     base_sha: str
     sub_repos: list = field(default_factory=list)
     sub_repo_shas: dict = field(default_factory=dict)
+    sub_repo_branches: dict = field(default_factory=dict)
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -35,6 +36,7 @@ class WorktreeMeta:
         data.pop("mode", None)
         data.setdefault("sub_repos", [])
         data.setdefault("sub_repo_shas", {})
+        data.setdefault("sub_repo_branches", {})
         return cls(**data)
 
 
@@ -51,27 +53,21 @@ class WorktreeStateManager:
         project_root: Path,
         *,
         underlay: str,
-        base_branch: str = "main",
     ) -> Config:
         """Initialise a new CWM project at *project_root*.
 
-        Creates .cwm/, base_ws/ directory structure and writes config.yaml.
-        The caller is expected to populate base_ws/src/ with repositories.
+        Creates .cwm/ metadata directories and worktrees/ directory.
+        The project root is treated as the base colcon workspace; an existing
+        src/ tree is adopted as-is.
         """
         config = Config(
             underlay=underlay,
-            base_ws=BaseWorkspaceConfig(branch=base_branch),
-            worktrees_dir="worktrees",
             project_root=project_root,
         )
 
-        # Create directory scaffolding
+        # Create CWM metadata dirs and the overlay worktrees directory
         ensure_dir(config.cwm_dir / "worktrees")
         ensure_dir(config.cwm_dir / "cache")
-        ensure_dir(config.base_ws_path / "src")
-        ensure_dir(config.base_ws_path / "build")
-        ensure_dir(config.base_ws_path / "install")
-        ensure_dir(config.base_ws_path / "log")
         ensure_dir(config.worktrees_path)
 
         config.save()

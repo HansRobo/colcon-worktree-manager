@@ -46,7 +46,7 @@ def clean(worktree_branch: str | None, clean_all: bool, clean_base: bool) -> Non
                     if ws_dir.is_dir() and ws_dir.name.endswith("_ws"):
                         targets.append((ws_dir.name, _artifact_dirs(ws_dir)))
             if clean_base:
-                targets.append(("base_ws", _artifact_dirs(config.base_ws_path)))
+                targets.append(("base", _artifact_dirs(config.project_root)))
         elif worktree_branch:
             ws_path = config.worktree_ws_path(worktree_branch)
             targets.append((worktree_branch, _artifact_dirs(ws_path)))

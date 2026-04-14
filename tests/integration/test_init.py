@@ -10,6 +10,7 @@ from click.testing import CliRunner
 import cwm.util.ros_env as ros_env
 from cwm.cli.main import cli
 from cwm.core.config import Config
+from tests.conftest import make_git_repo
 
 
 class TestCwmInit:
@@ -32,10 +33,8 @@ class TestCwmInit:
             cwd = Path.cwd()
             assert (cwd / ".cwm").is_dir()
             assert (cwd / ".cwm" / "config.yaml").is_file()
-            assert (cwd / "base_ws" / "src").is_dir()
-            assert (cwd / "base_ws" / "build").is_dir()
-            assert (cwd / "base_ws" / "install").is_dir()
             assert (cwd / "worktrees").is_dir()
+            assert not (cwd / "base_ws").exists()
 
     def test_config_persisted(self, tmp_path: Path) -> None:
         underlay = tmp_path / "ros"
@@ -48,14 +47,13 @@ class TestCwmInit:
         with runner.isolated_filesystem(temp_dir=project):
             result = runner.invoke(
                 cli,
-                ["init", "--underlay", str(underlay), "--base-branch", "develop"],
+                ["init", "--underlay", str(underlay)],
                 catch_exceptions=False,
             )
             assert result.exit_code == 0
 
             config = Config.load(Path.cwd())
             assert config.underlay == str(underlay)
-            assert config.base_ws.branch == "develop"
 
     def test_auto_detects_underlay(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ros_base = tmp_path / "opt" / "ros"
@@ -105,3 +103,45 @@ class TestCwmInit:
             result = runner.invoke(cli, ["init", "--underlay", str(underlay)])
             assert result.exit_code != 0
             assert "already initialised" in result.output
+
+    def test_adopt_existing_workspace(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Existing src/ is adopted as-is without touching existing files."""
+        underlay = tmp_path / "ros"
+        underlay.mkdir()
+
+        project = tmp_path / "ws"
+        project.mkdir()
+
+        make_git_repo(project / "src" / "my_pkg", branch="develop")
+        existing_file = project / "src" / "my_pkg" / "package.xml"
+        existing_file.write_text("<package/>")
+
+        monkeypatch.chdir(project)
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["init", "--underlay", str(underlay)],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0, result.output
+        assert "Adopted" in result.output
+        assert existing_file.exists()
+
+    def test_fresh_init_does_not_create_src(self, tmp_path: Path) -> None:
+        """Fresh init leaves src/ creation to the user."""
+        underlay = tmp_path / "ros"
+        underlay.mkdir()
+
+        project = tmp_path / "fresh_ws"
+        project.mkdir()
+
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=project):
+            result = runner.invoke(
+                cli,
+                ["init", "--underlay", str(underlay)],
+                catch_exceptions=False,
+            )
+            assert result.exit_code == 0, result.output
+            assert not (Path.cwd() / "src").exists()
+            assert "Clone your repositories into src/" in result.output

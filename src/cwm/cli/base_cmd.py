@@ -28,7 +28,7 @@ def update(no_build: bool) -> None:
         if not src_path.exists():
             raise CWMError(
                 f"Base workspace source not found: {src_path}\n"
-                "Clone your repositories into base_ws/src/ first."
+                "Clone your repositories into src/ first."
             )
 
         from cwm.util.repos import discover_sub_repos
@@ -36,7 +36,7 @@ def update(no_build: bool) -> None:
         if not sub_repos:
             raise CWMError(
                 f"No repositories found in {src_path}.\n"
-                "Clone your repositories into base_ws/src/ first."
+                "Clone your repositories into src/ first."
             )
 
         click.echo("Pulling repositories...")
@@ -52,9 +52,9 @@ def update(no_build: bool) -> None:
         # Build base workspace
         click.echo("Building base workspace...")
         build_args = []
-        if config.base_ws.symlink_install:
+        if config.symlink_install:
             build_args.append("--symlink-install")
-        run_colcon_build(config.base_ws_path, build_args)
+        run_colcon_build(config.project_root, build_args)
         click.echo("Base workspace updated successfully.")
 
     except CWMError as exc:

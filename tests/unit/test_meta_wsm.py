@@ -2,46 +2,25 @@
 
 from __future__ import annotations
 
-import os
-import subprocess
 from pathlib import Path
 
 import pytest
 
-from cwm.core.config import BaseWorkspaceConfig, Config
+from cwm.core.config import Config
 from cwm.core.meta_wsm import MetaWorkspaceManager
 from cwm.core.wsm import WorktreeMeta
 from cwm.errors import SubRepoNotFoundError, WorktreeExistsError, WorktreeNotFoundError
-
-# Minimal git identity environment for subprocess calls
-_GIT_ENV = {
-    **os.environ,
-    "GIT_AUTHOR_NAME": "Test",
-    "GIT_AUTHOR_EMAIL": "t@t.com",
-    "GIT_COMMITTER_NAME": "Test",
-    "GIT_COMMITTER_EMAIL": "t@t.com",
-}
-
-
-def _git(args: list[str], cwd: Path) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, env=_GIT_ENV)
-
-
-def _make_git_repo(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    _git(["init", "-b", "main"], path)
-    _git(["commit", "--allow-empty", "-m", "init"], path)
+from tests.conftest import make_git_repo
 
 
 @pytest.fixture
 def meta_project(tmp_path: Path) -> Config:
-    """Create a minimal meta-mode project with two sub-repos in base_ws/src/."""
+    """Create a minimal meta-mode project with two sub-repos in src/."""
     project_root = tmp_path / "project"
     project_root.mkdir()
 
     config = Config(
         underlay="/opt/ros/jazzy",
-        base_ws=BaseWorkspaceConfig(branch="main"),
         project_root=project_root,
     )
 
@@ -49,16 +28,13 @@ def meta_project(tmp_path: Path) -> Config:
     for d in [
         config.cwm_dir / "worktrees",
         config.cwm_dir / "cache",
-        config.base_ws_path / "build",
-        config.base_ws_path / "install",
-        config.base_ws_path / "log",
         config.worktrees_path,
     ]:
         d.mkdir(parents=True)
 
-    # Create two sub-repos under base_ws/src/
-    _make_git_repo(config.base_src_path / "core" / "pkg_a")
-    _make_git_repo(config.base_src_path / "core" / "pkg_b")
+    # Create two sub-repos under src/
+    make_git_repo(config.base_src_path / "core" / "pkg_a")
+    make_git_repo(config.base_src_path / "core" / "pkg_b")
 
     config.save()
     return config
@@ -89,6 +65,7 @@ class TestCreateWorktree:
         assert meta.branch == "feature-fix"
         assert "core/pkg_a" in meta.sub_repos
         assert "core/pkg_a" in meta.sub_repo_shas
+        assert meta.sub_repo_branches.get("core/pkg_a") == "main"
 
     def test_raises_if_already_exists(self, meta_project: Config) -> None:
         mgr = MetaWorkspaceManager(meta_project)

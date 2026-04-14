@@ -10,7 +10,7 @@ from cwm.core.dga import DependencyGraphAnalyzer
 
 class TestGenerateBuildArgs:
     def test_single_changed_pkg(self) -> None:
-        cdc = ColconDiscoveryController(Path("/fake"), "main")
+        cdc = ColconDiscoveryController(Path("/fake"))
         args = cdc.generate_build_args({"pkg_a"}, set())
         assert "--packages-select" in args
         assert "pkg_a" in args
@@ -18,7 +18,7 @@ class TestGenerateBuildArgs:
         assert "--symlink-install" in args
 
     def test_changed_and_affected(self) -> None:
-        cdc = ColconDiscoveryController(Path("/fake"), "main")
+        cdc = ColconDiscoveryController(Path("/fake"))
         args = cdc.generate_build_args({"core_lib"}, {"perception_node", "control_node"})
         # All three should appear in both --packages-select and --allow-overriding
         select_idx = args.index("--packages-select")
@@ -28,12 +28,12 @@ class TestGenerateBuildArgs:
         assert selected == {"control_node", "core_lib", "perception_node"}
 
     def test_no_symlink_install(self) -> None:
-        cdc = ColconDiscoveryController(Path("/fake"), "main")
+        cdc = ColconDiscoveryController(Path("/fake"))
         args = cdc.generate_build_args({"pkg_a"}, set(), symlink_install=False)
         assert "--symlink-install" not in args
 
     def test_empty_returns_empty(self) -> None:
-        cdc = ColconDiscoveryController(Path("/fake"), "main")
+        cdc = ColconDiscoveryController(Path("/fake"))
         args = cdc.generate_build_args(set(), set())
         assert args == []
 
@@ -42,7 +42,7 @@ class TestIgnoreMarkers:
     def test_place_and_remove_markers(self, sample_ws: Path) -> None:
         dga = DependencyGraphAnalyzer()
         dga.scan(sample_ws / "src")
-        cdc = ColconDiscoveryController(sample_ws / "src", "main")
+        cdc = ColconDiscoveryController(sample_ws / "src")
 
         keep = {"core_lib", "perception_node"}
         markers = cdc.place_ignore_markers(dga, keep)

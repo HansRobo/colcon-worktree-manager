@@ -79,7 +79,7 @@ def build(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_arg
         click.echo(f"  Found {len(dga.packages)} packages")
 
         click.echo("Detecting changes...")
-        cdc = ColconDiscoveryController(src_path, config.base_ws.branch)
+        cdc = ColconDiscoveryController(src_path)
 
         from cwm.core.wsm import WorktreeMeta
         meta = WorktreeMeta.load(config.worktree_meta_path(branch))
@@ -107,7 +107,7 @@ def build(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_arg
         colcon_extra = cdc.generate_build_args(
             changed,
             affected,
-            symlink_install=config.base_ws.symlink_install,
+            symlink_install=config.symlink_install,
         )
         colcon_extra.extend(colcon_args)
 

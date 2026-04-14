@@ -9,6 +9,10 @@ class ConfigNotFoundError(CWMError):
     """No .cwm/ directory found in the current or parent directories."""
 
 
+class ConfigVersionError(CWMError):
+    """The .cwm/config.yaml was written by an older version of CWM and needs re-initialisation."""
+
+
 class WorktreeExistsError(CWMError):
     """A worktree for this branch already exists."""
 

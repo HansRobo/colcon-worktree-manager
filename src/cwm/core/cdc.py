@@ -17,20 +17,10 @@ class ColconDiscoveryController:
     is available for edge cases.
     """
 
-    def __init__(self, worktree_src: Path, base_branch: str = "main") -> None:
+    def __init__(self, worktree_src: Path) -> None:
         self._src = worktree_src
-        self._base_branch = base_branch
 
     # -- Changed file detection ------------------------------------------------
-
-    def get_changed_files(self) -> list[str]:
-        """Return files changed between the base branch and HEAD.
-
-        Uses ``git diff --name-only $(git merge-base HEAD <base>)`` so that
-        only changes introduced on the current branch are considered.
-        """
-        merge_base = git.get_merge_base("HEAD", self._base_branch, cwd=self._src)
-        return git.diff_name_only(merge_base, cwd=self._src)
 
     def get_changed_files_meta(
         self,

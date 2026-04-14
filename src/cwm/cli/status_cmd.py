@@ -11,6 +11,7 @@ from cwm.core.config import Config
 from cwm.errors import CWMError, GitError
 from cwm.util import git
 from cwm.util.fs import find_project_root
+from cwm.util.repos import discover_sub_repos
 
 
 @cli.command()
@@ -30,7 +31,7 @@ def status(as_json: bool) -> None:
             click.echo(json.dumps({"base": base_info, "worktrees": worktrees_info}, indent=2))
             return
 
-        _print_human(config, base_info, worktrees_info)
+        _print_human(base_info, worktrees_info)
 
     except CWMError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -42,13 +43,15 @@ def _collect_base(config: Config) -> dict:
 
     dirty = False
     if config.base_src_path.exists():
-        try:
-            dirty = git.is_dirty(cwd=config.base_src_path)
-        except GitError:
-            pass
+        for abs_path in discover_sub_repos(config.base_src_path).values():
+            try:
+                if git.is_dirty(cwd=abs_path):
+                    dirty = True
+                    break
+            except GitError:
+                pass
 
     return {
-        "branch": config.base_ws.branch,
         "built": built,
         "dirty": dirty,
     }
@@ -59,21 +62,28 @@ def _collect_worktrees(config: Config, wsm) -> list[dict]:
     result = []
     for meta in metas:
         ws_path = config.worktree_ws_path(meta.branch)
-        src_path = config.worktree_src_path(meta.branch)
         exists = ws_path.exists()
         built = (config.worktree_install_path(meta.branch) / "local_setup.bash").exists()
 
         dirty = False
         ahead = 0
-        if exists and src_path.exists():
-            try:
-                dirty = git.is_dirty(cwd=src_path)
-            except GitError:
-                pass
-            try:
-                ahead = git.commits_ahead(config.base_ws.branch, cwd=src_path)
-            except GitError:
-                pass
+        if exists:
+            for rel in meta.sub_repos:
+                sub_path = config.worktree_src_path(meta.branch) / rel
+                if not sub_path.is_dir():
+                    continue
+                if not dirty:
+                    try:
+                        if git.is_dirty(cwd=sub_path):
+                            dirty = True
+                    except GitError:
+                        pass
+                base_branch = meta.sub_repo_branches.get(rel)
+                if base_branch:
+                    try:
+                        ahead = max(ahead, git.commits_ahead(base_branch, cwd=sub_path))
+                    except GitError:
+                        pass
 
         entry: dict = {
             "branch": meta.branch,
@@ -89,11 +99,10 @@ def _collect_worktrees(config: Config, wsm) -> list[dict]:
     return result
 
 
-def _print_human(config: Config, base: dict, worktrees: list[dict]) -> None:
-    # Base workspace
+def _print_human(base: dict, worktrees: list[dict]) -> None:
     built_mark = click.style("built", fg="green") if base["built"] else click.style("not built", fg="yellow")
     dirty_mark = click.style(" dirty", fg="red") if base["dirty"] else ""
-    click.echo(f"Base workspace  [{config.base_ws.branch}]  {built_mark}{dirty_mark}")
+    click.echo(f"Base workspace  {built_mark}{dirty_mark}")
 
     if not worktrees:
         click.echo()
