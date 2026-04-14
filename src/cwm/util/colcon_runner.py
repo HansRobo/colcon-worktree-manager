@@ -11,7 +11,7 @@ from pathlib import Path
 from cwm.errors import ColconError
 
 
-def _run_colcon(
+def run_colcon(
     subcommand: str,
     workspace: Path,
     extra_args: list[str] | None = None,
@@ -47,7 +47,7 @@ def run_colcon_build(
     env: dict[str, str] | None = None,
 ) -> int:
     """Execute ``colcon build`` in *workspace* and stream output to stdout."""
-    return _run_colcon("build", workspace, extra_args, env=env)
+    return run_colcon("build", workspace, extra_args, env=env)
 
 
 def run_colcon_build_sourced(
@@ -95,4 +95,4 @@ def run_colcon_test(
     env: dict[str, str] | None = None,
 ) -> int:
     """Execute ``colcon test`` in *workspace* and stream output."""
-    return _run_colcon("test", workspace, extra_args, env=env)
+    return run_colcon("test", workspace, extra_args, env=env)
