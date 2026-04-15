@@ -6,7 +6,7 @@ A CLI tool that integrates `git worktree` with `colcon` for parallel ROS 2 devel
 
 - **Smart diff-based builds** - Automatically detects changed packages via `git diff` and builds only what's needed
 - **ABI-safe reverse dependency resolution** - Computes and rebuilds affected packages to prevent ODR violations and runtime crashes
-- **Environment isolation** - Activates per-worktree environment (ROS overlays, `AMENT_PREFIX_PATH`) via `cwm activate` / `deactivate`
+- **Environment isolation** - Activates per-worktree environment (ROS overlays, `AMENT_PREFIX_PATH`) via `cwm activate` / `cwm deactivate`
 - **Optimised colcon arguments** - Generates `--packages-select` and `--allow-overriding` flags automatically
 
 ## Installation
@@ -19,6 +19,21 @@ pip install .
 
 ## Quick Start
 
+### Shell integration (one-time setup)
+
+Add the following line to `~/.bashrc` (or `~/.zshrc`) so that `cwm activate` and `cwm deactivate` can mutate the current shell environment:
+
+```bash
+eval "$(cwm shell-init)"
+```
+
+Without shell integration you can still activate a worktree with the long form:
+
+```bash
+source <(cwm activate <branch>)
+deactivate
+```
+
 ### Adopting an existing workspace
 
 If you already have a colcon workspace (e.g. `~/ws/ibis_ws` with `src/` populated):
@@ -27,9 +42,9 @@ If you already have a colcon workspace (e.g. `~/ws/ibis_ws` with `src/` populate
 cd ~/ws/ibis_ws
 cwm init          # ROS 2 underlay is auto-detected
 cwm worktree add feature-perception
-source <(cwm activate feature-perception)
+cwm activate feature-perception
 cwm build
-deactivate
+cwm deactivate
 ```
 
 ### Starting fresh
@@ -41,24 +56,50 @@ mkdir src
 git clone <your-repo> src/
 colcon build --symlink-install
 cwm worktree add feature-perception
-source <(cwm activate feature-perception)
+cwm activate feature-perception
 cwm build
-deactivate
+cwm deactivate
 ```
 
 ## Commands
 
+### Core
+
 | Command | Description |
 |---------|-------------|
 | `cwm init [--underlay PATH]` | Initialise a CWM project (underlay auto-detected from `/opt/ros/`) |
-| `cwm base update` | Pull and rebuild the base workspace |
-| `cwm worktree add <branch>` | Create a new overlay worktree |
-| `cwm worktree rm <branch>` | Remove a worktree and its artifacts |
-| `cwm worktree list` | List all managed worktrees |
-| `source <(cwm activate [branch])` | Activate a worktree environment (or interactive menu) |
-| `deactivate` | Restore the previous environment |
-| `cwm build [--dry-run] [--no-rdeps]` | Build changed packages + reverse deps |
+| `cwm shell-init` | Print the shell integration function — add `eval "$(cwm shell-init)"` to `.bashrc` |
+| `cwm activate [branch]` | Activate a worktree environment (interactive menu when branch is omitted) |
+| `cwm deactivate` | Restore the previous environment (requires shell integration) |
+| `cwm build [--dry-run] [--no-rdeps]` | Build changed packages + reverse deps in the active worktree |
 | `cwm clean [--all]` | Clean build artifacts |
+| `cwm status [--json]` | Show the state of the base workspace and all worktrees |
+
+### Worktree management
+
+| Command | Description |
+|---------|-------------|
+| `cwm worktree add <branch> [--repos PATH]` | Create a new overlay worktree (optionally limit to specific sub-repos) |
+| `cwm worktree rm <branch> [--force]` | Remove a worktree and its artifacts |
+| `cwm worktree list` | List all managed worktrees |
+| `cwm worktree focus <branch> [--add PATH\|--rm PATH\|--list]` | Add, remove, or list sub-repository worktrees for a branch |
+| `cwm worktree prune [--force]` | Remove stale worktree state |
+| `cwm worktree rebase <branch>` | Rebase a worktree branch onto the current base |
+
+### Base workspace
+
+| Command | Description |
+|---------|-------------|
+| `cwm base update` | Pull and rebuild the base workspace |
+
+### Scripting / tooling
+
+| Command | Description |
+|---------|-------------|
+| `cwm detect [--cwd PATH]` | Detect whether the directory is inside a CWM project (outputs JSON) |
+| `cwm env <branch>` | Show environment variables and setup script paths for a worktree (JSON) |
+
+Several commands accept `--json` for machine-readable output: `cwm status`, `cwm worktree add`, `cwm worktree rm`, and `cwm worktree list`.
 
 ### colcon passthrough
 
@@ -67,7 +108,7 @@ not recognised by `cwm build` are forwarded to colcon, and any colcon verb not
 defined by cwm is run verbatim in the active worktree workspace:
 
 ```bash
-source <(cwm activate feature-perception)
+cwm activate feature-perception
 
 # Smart diff-based build; extra flags forwarded to colcon
 cwm build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
