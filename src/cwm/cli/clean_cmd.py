@@ -1,4 +1,4 @@
-"""cwm clean - clean overlay build artifacts."""
+"""cwm ws clean - clean overlay build artifacts."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import click
 
 from cwm.cli.completion import complete_worktree_branches
-from cwm.cli.main import cli
+from cwm.cli.main import ws
 from cwm.core.config import Config
 from cwm.errors import CWMError, NotActivatedError
 from cwm.util.fs import find_project_root
@@ -17,7 +17,7 @@ from cwm.util.fs import find_project_root
 ARTIFACT_DIRS = ("build", "install", "log")
 
 
-@cli.command()
+@ws.command()
 @click.option(
     "-w", "--worktree",
     "worktree_branch",
@@ -54,10 +54,10 @@ def clean(worktree_branch: str | None, clean_all: bool, clean_base: bool) -> Non
             branch = os.environ.get("CWM_WORKTREE")
             if not branch:
                 raise NotActivatedError(
-                    "cwm clean requires an active CWM workspace, the -w/--worktree flag, "
+                    "cwm ws clean requires an active CWM workspace, the -w/--worktree flag, "
                     "or --all.\n"
                     "  Activate:  source <(cwm activate <branch>)\n"
-                    "  Or:        cwm clean -w <branch>"
+                    "  Or:        cwm ws clean -w <branch>"
                 )
             targets.append((branch, _artifact_dirs(config.worktree_ws_path(branch))))
 

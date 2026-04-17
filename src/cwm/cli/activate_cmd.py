@@ -156,7 +156,7 @@ deactivate() {{
 echo ""
 echo "=== CWM Worktree: {q_branch} ==="
 echo "  Workspace: {q_workspace}"
-echo "  Run 'cwm build' to build changed packages."
+echo "  Run 'cwm ws build' to build changed packages."
 echo "  Run 'deactivate' to restore the previous environment."
 echo ""
 """

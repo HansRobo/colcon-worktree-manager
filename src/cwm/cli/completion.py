@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Iterable
 
@@ -94,5 +95,37 @@ def complete_distros(
         from cwm.util.ros_env import list_available_distros
 
         return _match(list_available_distros(), incomplete)
+    except Exception:
+        return []
+
+
+def complete_cd_targets(
+    ctx: click.Context, param: click.Parameter, incomplete: str
+) -> list[CompletionItem]:
+    """Complete cwm cd first argument: 'base', branch names, and active sub-repos."""
+    items = ["base"]
+    try:
+        _, wsm = _load_config_and_wsm()
+        items.extend(m.branch for m in wsm.list_worktrees())
+        branch = os.environ.get("CWM_WORKTREE")
+        if os.environ.get("CWM_WORKSPACE") and branch:
+            meta = wsm.get_worktree_meta(branch)
+            items.extend(meta.sub_repos or [])
+    except Exception:
+        pass
+    return _match(items, incomplete)
+
+
+def complete_cd_repos(
+    ctx: click.Context, param: click.Parameter, incomplete: str
+) -> list[CompletionItem]:
+    """Complete cwm cd second argument with sub-repos for the branch in ctx.params['target']."""
+    try:
+        _, wsm = _load_config_and_wsm()
+        target = ctx.params.get("target")
+        if not target:
+            return []
+        meta = wsm.get_worktree_meta(target)
+        return _match(meta.sub_repos or [], incomplete)
     except Exception:
         return []

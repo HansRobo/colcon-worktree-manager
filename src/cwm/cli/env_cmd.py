@@ -1,4 +1,4 @@
-"""cwm env - output environment variables for a worktree."""
+"""cwm inspect env - output environment variables for a worktree."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ import json
 import click
 
 from cwm.cli.completion import complete_worktree_branches
-from cwm.cli.main import cli
+from cwm.cli.main import inspect
 from cwm.core.config import Config
 from cwm.errors import CWMError
 from cwm.util.fs import find_project_root
 
 
-@cli.command()
+@inspect.command()
 @click.argument("branch", shell_complete=complete_worktree_branches)
 def env(branch: str) -> None:
     """Show the environment variables for the BRANCH worktree.

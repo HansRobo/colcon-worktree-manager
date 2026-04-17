@@ -1,0 +1,156 @@
+"""cwm cd / cwm switch - worktree directory navigation."""
+
+from __future__ import annotations
+
+import os
+import sys
+
+import click
+
+from cwm.cli.completion import complete_cd_repos, complete_cd_targets, complete_worktree_branches, complete_worktree_sub_repos
+from cwm.cli.main import cli
+from cwm.core.config import Config
+from cwm.core.wsm import WorktreeStateManager
+from cwm.errors import CWMError
+from cwm.util.fs import find_project_root
+
+_CD_HINT = """\
+cwm cd requires shell integration to change the current directory.
+
+  Set up once (add to ~/.bashrc):
+    eval "$(cwm shell-init)"
+
+  Then use directly:
+    cwm cd <branch>         # go to worktree workspace root
+    cwm cd <branch> <repo>  # go to sub-repo inside worktree
+    cwm cd <repo>           # go to sub-repo in active worktree
+    cwm cd base             # go to project root
+"""
+
+_SWITCH_HINT = """\
+cwm switch requires shell integration to activate and navigate in one step.
+
+  Set up once (add to ~/.bashrc):
+    eval "$(cwm shell-init)"
+
+  Then use directly:
+    cwm switch <branch>         # activate + go to workspace (or sole sub-repo)
+    cwm switch <branch> <repo>  # activate + go to specific sub-repo
+"""
+
+
+def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
+    """Return the resolved absolute path, or raise with an error message."""
+    root = find_project_root()
+    config = Config.load(root)
+    wsm = WorktreeStateManager(config)
+
+    # No args → active workspace root (or sole sub-repo when auto_subrepo)
+    if not args:
+        ws = os.environ.get("CWM_WORKSPACE")
+        if ws:
+            if auto_subrepo:
+                branch = os.environ.get("CWM_WORKTREE")
+                if branch:
+                    try:
+                        meta = wsm.get_worktree_meta(branch)
+                        if len(meta.sub_repos or []) == 1:
+                            return str(config.worktree_src_path(branch) / meta.sub_repos[0])
+                    except CWMError:
+                        pass
+            return ws
+        raise CWMError(
+            "No worktree specified. Usage: cwm cd <branch|repo|base>"
+        )
+
+    target = args[0]
+
+    # base → project root
+    if target == "base":
+        return str(config.project_root)
+
+    # Defer branch list until actually needed
+    branches = [m.branch for m in wsm.list_worktrees()]
+
+    # Branch match → workspace root (or sole sub-repo when auto_subrepo) or named sub-repo
+    if target in branches:
+        ws_path = config.worktree_ws_path(target)
+        if len(args) == 1:
+            if auto_subrepo:
+                try:
+                    meta = wsm.get_worktree_meta(target)
+                    if len(meta.sub_repos or []) == 1:
+                        return str(config.worktree_src_path(target) / meta.sub_repos[0])
+                except CWMError:
+                    pass
+            return str(ws_path)
+        repo = args[1]
+        meta = wsm.get_worktree_meta(target)
+        if repo not in (meta.sub_repos or []):
+            raise CWMError(
+                f"Sub-repo '{repo}' not found in worktree '{target}'. "
+                f"Available: {', '.join(meta.sub_repos or [])}"
+            )
+        return str(config.worktree_src_path(target) / repo)
+
+    # Active worktree → sub-repo within it
+    ws = os.environ.get("CWM_WORKSPACE")
+    if ws:
+        branch = os.environ.get("CWM_WORKTREE", "")
+        if branch:
+            try:
+                meta = wsm.get_worktree_meta(branch)
+                if target in (meta.sub_repos or []):
+                    return str(config.worktree_src_path(branch) / target)
+            except CWMError:
+                pass
+
+    raise CWMError(
+        f"No worktree or sub-repo found for '{target}'. "
+        "Use 'cwm worktree list' to see available branches."
+    )
+
+
+@cli.command(hidden=True, name="__cd-resolve")
+@click.option("--auto-subrepo", is_flag=True)
+@click.argument("args", nargs=-1)
+def cd_resolve(args: tuple[str, ...], auto_subrepo: bool) -> None:
+    """Internal: resolve a cd/switch target path. Used by the cwm shell function."""
+    try:
+        path = _resolve(args, auto_subrepo=auto_subrepo)
+        click.echo(path)
+    except CWMError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+
+
+@cli.command("cd")
+@click.argument("target", required=False, default=None, shell_complete=complete_cd_targets)
+@click.argument("repo", required=False, default=None, shell_complete=complete_cd_repos)
+def cd(target: str | None, repo: str | None) -> None:
+    """Navigate to a worktree directory.
+
+    Requires shell integration. Run 'eval "$(cwm shell-init)"' first.
+
+    \\b
+        cwm cd <branch>         # go to worktree workspace root
+        cwm cd <branch> <repo>  # go to sub-repo inside worktree
+        cwm cd <repo>           # go to sub-repo in active worktree
+        cwm cd base             # go to project root
+    """
+    raise click.ClickException(_CD_HINT.rstrip())
+
+
+@cli.command("switch")
+@click.argument("branch", shell_complete=complete_worktree_branches)
+@click.argument("repo", required=False, default=None, shell_complete=complete_worktree_sub_repos)
+def switch(branch: str, repo: str | None) -> None:
+    """Activate a worktree and navigate to it in one step.
+
+    Requires shell integration. Run 'eval "$(cwm shell-init)"' first.
+
+    \\b
+        cwm switch <branch>         # activate + go to workspace (or sole sub-repo)
+        cwm switch <branch> <repo>  # activate + go to specific sub-repo
+    """
+    raise click.ClickException(_SWITCH_HINT.rstrip())

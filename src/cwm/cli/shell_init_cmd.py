@@ -7,7 +7,7 @@ import click
 from cwm.cli.main import cli
 
 _SHELL_FUNCTION = """\
-# cwm shell integration - allows 'cwm activate' to mutate the current shell.
+# cwm shell integration - allows 'cwm activate', 'cwm cd', and 'cwm switch' to work in-shell.
 # Add to ~/.bashrc:  eval "$(cwm shell-init)"
 cwm() {
     case "$1" in
@@ -21,6 +21,30 @@ cwm() {
                 echo "cwm: no active workspace to deactivate" >&2
                 return 1
             fi
+            ;;
+        cd)
+            shift
+            local __cwm_path __cwm_ret
+            __cwm_path="$(command cwm __cd-resolve "$@")"
+            __cwm_ret=$?
+            if [ $__cwm_ret -ne 0 ]; then
+                echo "$__cwm_path" >&2
+                return $__cwm_ret
+            fi
+            cd "$__cwm_path"
+            ;;
+        switch)
+            local __cwm_branch __cwm_path __cwm_ret
+            __cwm_branch="$2"
+            shift 2
+            eval "$(command cwm activate "$__cwm_branch")" || return $?
+            __cwm_path="$(command cwm __cd-resolve --auto-subrepo "$@")"
+            __cwm_ret=$?
+            if [ $__cwm_ret -ne 0 ]; then
+                echo "$__cwm_path" >&2
+                return $__cwm_ret
+            fi
+            cd "$__cwm_path"
             ;;
         *)
             command cwm "$@"
@@ -39,7 +63,7 @@ def shell_init() -> None:
     \\b
         eval "$(cwm shell-init)"
 
-    This defines a 'cwm' shell function that makes 'cwm activate' and
-    'cwm deactivate' work directly without 'source <(...)'.
+    This defines a 'cwm' shell function that makes 'cwm activate',
+    'cwm deactivate', 'cwm cd', and 'cwm switch' work directly in the shell.
     """
     click.echo(_SHELL_FUNCTION, nl=False)

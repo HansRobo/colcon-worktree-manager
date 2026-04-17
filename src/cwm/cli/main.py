@@ -44,7 +44,20 @@ class HelpfulGroup(click.Group):
         cmd = super().get_command(ctx, name)
         if cmd is not None:
             return cmd
-        return _make_colcon_passthrough(name)
+        moved_commands = getattr(self, "moved_commands", {})
+        if name in moved_commands:
+            return _make_moved_command(name, moved_commands[name])
+        if getattr(self, "enable_passthrough", False):
+            return _make_colcon_passthrough(name)
+        return None
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        ordered = getattr(self, "command_order", ())
+        commands = list(self.commands)
+        if not ordered:
+            return commands
+        index = {name: i for i, name in enumerate(ordered)}
+        return sorted(commands, key=lambda name: index.get(name, len(index)))
 
     def resolve_command(self, ctx: click.Context, args: list[str]):
         try:
@@ -84,10 +97,50 @@ def _make_colcon_passthrough(verb: str) -> click.Command:
     return _passthrough
 
 
+def _make_moved_command(old_name: str, new_path: str) -> click.Command:
+    """Return a hidden compatibility stub that reports the new command path."""
+
+    @click.command(
+        name=old_name,
+        context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+        help=f"Moved to ``cwm {new_path}``.",
+        hidden=True,
+    )
+    @click.argument("_args", nargs=-1, type=click.UNPROCESSED)
+    def _moved(_args: tuple[str, ...]) -> None:
+        raise click.ClickException(
+            f"'cwm {old_name}' was removed.\n"
+            f"Use: cwm {new_path}"
+        )
+
+    return _moved
+
+
 @click.group(cls=HelpfulGroup)
 @click.version_option(version=__version__, prog_name="cwm")
 def cli() -> None:
     """Colcon Worktree Manager - parallel ROS 2 development with git worktrees."""
+
+
+cli.command_order = [
+    "init",
+    "activate",
+    "switch",
+    "cd",
+    "shell-init",
+    "worktree",
+    "ws",
+    "inspect",
+    "base",
+]
+cli.enable_passthrough = True
+cli.moved_commands = {
+    "build": "ws build",
+    "clean": "ws clean",
+    "status": "ws status",
+    "env": "inspect env",
+    "detect": "inspect detect",
+}
 
 
 @cli.group()
@@ -95,21 +148,44 @@ def worktree() -> None:
     """Manage worktree overlay workspaces."""
 
 
+worktree.command_order = ["add", "rm", "list", "focus", "prune", "rebase"]
+
+
+@cli.group()
+def ws() -> None:
+    """Manage workspace operations."""
+
+
+ws.command_order = ["build", "clean", "status"]
+
+
+@cli.group()
+def inspect() -> None:
+    """Inspect CWM state for humans and tooling."""
+
+
+inspect.command_order = ["env", "detect"]
+
+
 @cli.group()
 def base() -> None:
     """Manage the base (underlay) workspace."""
 
 
+base.command_order = ["update"]
+
+
 # Import subcommands so they register with Click groups.
 # The imports are intentionally at the bottom to avoid circular dependencies.
-from cwm.cli.init_cmd import init  # noqa: E402, F401
-from cwm.cli.worktree_cmd import add, ls, prune, rebase, rm  # noqa: E402, F401
-from cwm.cli.focus_cmd import focus  # noqa: E402, F401
-from cwm.cli.build_cmd import build  # noqa: E402, F401
-from cwm.cli.activate_cmd import activate  # noqa: E402, F401
-from cwm.cli.shell_init_cmd import shell_init  # noqa: E402, F401
-from cwm.cli.base_cmd import update  # noqa: E402, F401
-from cwm.cli.clean_cmd import clean  # noqa: E402, F401
-from cwm.cli.status_cmd import status  # noqa: E402, F401
-from cwm.cli.env_cmd import env  # noqa: E402, F401
-from cwm.cli.detect_cmd import detect  # noqa: E402, F401
+import cwm.cli.init_cmd  # noqa: E402, F401
+import cwm.cli.activate_cmd  # noqa: E402, F401
+import cwm.cli.cd_cmd  # noqa: E402, F401
+import cwm.cli.shell_init_cmd  # noqa: E402, F401
+import cwm.cli.worktree_cmd  # noqa: E402, F401
+import cwm.cli.focus_cmd  # noqa: E402, F401
+import cwm.cli.build_cmd  # noqa: E402, F401
+import cwm.cli.clean_cmd  # noqa: E402, F401
+import cwm.cli.status_cmd  # noqa: E402, F401
+import cwm.cli.env_cmd  # noqa: E402, F401
+import cwm.cli.detect_cmd  # noqa: E402, F401
+import cwm.cli.base_cmd  # noqa: E402, F401

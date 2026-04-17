@@ -1,4 +1,4 @@
-"""cwm build - smart diff-based colcon build."""
+"""cwm ws build - smart diff-based colcon build."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 
 from cwm.cli.completion import complete_worktree_branches
-from cwm.cli.main import cli
+from cwm.cli.main import ws
 from cwm.core.cdc import ColconDiscoveryController
 from cwm.core.config import Config
 from cwm.core.dga import DependencyGraphAnalyzer
@@ -38,14 +38,14 @@ def _resolve_worktree(worktree_branch: str | None) -> tuple[str, Path, Config]:
     ws_str = os.environ.get("CWM_WORKSPACE")
     if not branch or not ws_str:
         raise NotActivatedError(
-            "cwm build requires an active CWM workspace or the -w/--worktree flag.\n"
+            "cwm ws build requires an active CWM workspace or the -w/--worktree flag.\n"
             "  Activate:  source <(cwm activate <branch>)\n"
-            "  Or:        cwm build -w <branch>"
+            "  Or:        cwm ws build -w <branch>"
         )
     return branch, Path(ws_str), config
 
 
-@cli.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+@ws.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 @click.option(
     "-w", "--worktree",
     "worktree_branch",
