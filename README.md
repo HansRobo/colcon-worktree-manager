@@ -43,7 +43,7 @@ cd ~/ws/ibis_ws
 cwm init          # ROS 2 underlay is auto-detected
 cwm worktree add feature-perception
 cwm activate feature-perception
-cwm build
+cwm ws build
 cwm deactivate
 ```
 
@@ -57,23 +57,30 @@ git clone <your-repo> src/
 colcon build --symlink-install
 cwm worktree add feature-perception
 cwm activate feature-perception
-cwm build
+cwm ws build
 cwm deactivate
 ```
 
 ## Commands
 
-### Core
+### Shell / setup
 
 | Command | Description |
 |---------|-------------|
 | `cwm init [--underlay PATH]` | Initialise a CWM project (underlay auto-detected from `/opt/ros/`) |
-| `cwm shell-init` | Print the shell integration function — add `eval "$(cwm shell-init)"` to `.bashrc` |
 | `cwm activate [branch]` | Activate a worktree environment (interactive menu when branch is omitted) |
-| `cwm deactivate` | Restore the previous environment (requires shell integration) |
-| `cwm build [--dry-run] [--no-rdeps]` | Build changed packages + reverse deps in the active worktree |
-| `cwm clean [--all]` | Clean build artifacts |
-| `cwm status [--json]` | Show the state of the base workspace and all worktrees |
+| `cwm deactivate` | Restore the previous environment (provided by shell integration) |
+| `cwm switch <branch> [repo]` | Activate a worktree **and** navigate to it in one step; auto-selects the directory when only one sub-repo is managed |
+| `cwm cd [branch\|repo\|base] [repo]` | Jump to a worktree root or sub-repository via shell integration |
+| `cwm shell-init` | Print the shell integration function — add `eval "$(cwm shell-init)"` to `.bashrc` |
+
+### Workspace operations
+
+| Command | Description |
+|---------|-------------|
+| `cwm ws build [--dry-run] [--no-rdeps]` | Build changed packages + reverse deps in the active worktree |
+| `cwm ws clean [--all]` | Clean build artifacts |
+| `cwm ws status [--json]` | Show the state of the base workspace and all worktrees |
 
 ### Worktree management
 
@@ -86,32 +93,32 @@ cwm deactivate
 | `cwm worktree prune [--force]` | Remove stale worktree state |
 | `cwm worktree rebase <branch>` | Rebase a worktree branch onto the current base |
 
+### Inspection / tooling
+
+| Command | Description |
+|---------|-------------|
+| `cwm inspect env <branch>` | Show environment variables and setup script paths for a worktree (JSON) |
+| `cwm inspect detect [--cwd PATH]` | Detect whether the directory is inside a CWM project (outputs JSON) |
+
 ### Base workspace
 
 | Command | Description |
 |---------|-------------|
 | `cwm base update` | Pull and rebuild the base workspace |
 
-### Scripting / tooling
-
-| Command | Description |
-|---------|-------------|
-| `cwm detect [--cwd PATH]` | Detect whether the directory is inside a CWM project (outputs JSON) |
-| `cwm env <branch>` | Show environment variables and setup script paths for a worktree (JSON) |
-
-Several commands accept `--json` for machine-readable output: `cwm status`, `cwm worktree add`, `cwm worktree rm`, and `cwm worktree list`.
+Several commands accept `--json` for machine-readable output: `cwm ws status`, `cwm worktree add`, `cwm worktree rm`, and `cwm worktree list`.
 
 ### colcon passthrough
 
-After activation, `cwm` acts as a drop-in replacement for `colcon`.  Any flags
-not recognised by `cwm build` are forwarded to colcon, and any colcon verb not
+After activation, `cwm` acts as a drop-in replacement for `colcon`. Any flags
+not recognised by `cwm ws build` are forwarded to colcon, and any colcon verb not
 defined by cwm is run verbatim in the active worktree workspace:
 
 ```bash
 cwm activate feature-perception
 
 # Smart diff-based build; extra flags forwarded to colcon
-cwm build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+cwm ws build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # Run tests, list packages, inspect the graph — any colcon verb works
 cwm test --packages-select my_pkg

@@ -12,11 +12,11 @@ from cwm.cli.main import cli
 
 
 # ---------------------------------------------------------------------------
-# cwm build: unknown flags forwarded without "--"
+# cwm ws build: unknown flags forwarded without "--"
 # ---------------------------------------------------------------------------
 
 class TestBuildPassthrough:
-    """cwm build should forward unknown colcon flags without requiring '--'."""
+    """cwm ws build should forward unknown colcon flags without requiring '--'."""
 
     def _make_env(self, ws: Path) -> dict:
         return {
@@ -54,7 +54,7 @@ class TestBuildPassthrough:
 
             result = runner.invoke(
                 cli,
-                ["build", "--dry-run", "--symlink-install", "--cmake-args", "-DCMAKE_BUILD_TYPE=Release"],
+                ["ws", "build", "--dry-run", "--symlink-install", "--cmake-args", "-DCMAKE_BUILD_TYPE=Release"],
                 env=self._make_env(ws),
             )
 
@@ -63,7 +63,7 @@ class TestBuildPassthrough:
         assert "-DCMAKE_BUILD_TYPE=Release" in result.output
 
     def test_build_no_double_dash_required(self, tmp_path: Path) -> None:
-        """cwm build --dry-run --symlink-install must not fail with 'No such option'."""
+        """cwm ws build --dry-run --symlink-install must not fail with 'No such option'."""
         ws = tmp_path / "feature-x_ws"
         ws.mkdir()
 
@@ -91,12 +91,38 @@ class TestBuildPassthrough:
 
             result = runner.invoke(
                 cli,
-                ["build", "--dry-run", "--symlink-install"],
+                ["ws", "build", "--dry-run", "--symlink-install"],
                 env=self._make_env(ws),
             )
 
         assert "No such option" not in result.output
         assert result.exit_code == 0, result.output
+
+
+# ---------------------------------------------------------------------------
+# Removed top-level commands must not fall through to colcon passthrough
+# ---------------------------------------------------------------------------
+
+
+class TestMovedTopLevelCommands:
+    @pytest.mark.parametrize(
+        ("old_name", "new_path"),
+        [
+            ("build", "ws build"),
+            ("clean", "ws clean"),
+            ("status", "ws status"),
+            ("env", "inspect env"),
+            ("detect", "inspect detect"),
+        ],
+    )
+    def test_old_command_reports_new_location(self, old_name: str, new_path: str) -> None:
+        runner = CliRunner()
+
+        result = runner.invoke(cli, [old_name, "--anything"])
+
+        assert result.exit_code != 0
+        assert f"'cwm {old_name}' was removed." in result.output
+        assert f"Use: cwm {new_path}" in result.output
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""cwm status - show overall state of base workspace and all worktrees."""
+"""cwm ws status - show overall state of base workspace and all worktrees."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 
 import click
 
-from cwm.cli.main import cli
+from cwm.cli.main import ws
 from cwm.core.config import Config
 from cwm.errors import CWMError, GitError
 from cwm.util import git
@@ -14,7 +14,7 @@ from cwm.util.fs import find_project_root
 from cwm.util.repos import discover_sub_repos
 
 
-@cli.command()
+@ws.command()
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON (for scripting/agents).")
 def status(as_json: bool) -> None:
     """Show the state of the base workspace and all worktrees."""

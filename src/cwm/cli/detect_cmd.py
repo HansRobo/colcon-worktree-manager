@@ -1,4 +1,4 @@
-"""cwm detect - detect CWM project and output workspace information."""
+"""cwm inspect detect - detect CWM project and output workspace information."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from pathlib import Path
 
 import click
 
-from cwm.cli.main import cli
+from cwm.cli.main import inspect
 from cwm.core.config import Config
 from cwm.errors import ConfigNotFoundError, ConfigVersionError
 from cwm.util.fs import find_project_root
 
 
-@cli.command()
+@inspect.command()
 @click.option("--cwd", default=None, type=click.Path(exists=True), help="Directory to search from (default: current directory).")
 def detect(cwd: str | None) -> None:
     """Detect whether the current directory is inside a CWM project.
