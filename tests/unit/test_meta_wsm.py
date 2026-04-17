@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cwm.core.config import Config
+from cwm.core.config import COLCON_IGNORE, Config
 from cwm.core.meta_wsm import MetaWorkspaceManager
 from cwm.core.wsm import WorktreeMeta
 from cwm.errors import SubRepoNotFoundError, WorktreeExistsError, WorktreeNotFoundError
@@ -77,6 +77,18 @@ class TestCreateWorktree:
         mgr = MetaWorkspaceManager(meta_project)
         with pytest.raises(SubRepoNotFoundError, match="nonexistent"):
             mgr.create_worktree("feature-fix", ["nonexistent/pkg"])
+
+    def test_places_colcon_ignore_marker(self, meta_project: Config) -> None:
+        mgr = MetaWorkspaceManager(meta_project)
+        mgr.create_worktree("feature-fix", ["core/pkg_a"])
+        assert (meta_project.worktrees_path / COLCON_IGNORE).is_file()
+
+    def test_restores_colcon_ignore_marker_if_missing(self, meta_project: Config) -> None:
+        mgr = MetaWorkspaceManager(meta_project)
+        mgr.create_worktree("feature-fix", ["core/pkg_a"])
+        (meta_project.worktrees_path / COLCON_IGNORE).unlink()
+        mgr.create_worktree("feature-fix2", ["core/pkg_b"])
+        assert (meta_project.worktrees_path / COLCON_IGNORE).is_file()
 
 
 class TestRemoveWorktree:

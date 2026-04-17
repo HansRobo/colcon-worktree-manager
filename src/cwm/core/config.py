@@ -13,6 +13,7 @@ CONFIG_DIR = ".cwm"
 CONFIG_FILE = "config.yaml"
 WORKTREES_META_DIR = "worktrees"
 CACHE_DIR = "cache"
+COLCON_IGNORE = "COLCON_IGNORE"
 
 CONFIG_VERSION = 2
 
@@ -118,3 +119,7 @@ class Config:
     @property
     def cache_path(self) -> Path:
         return self.cwm_dir / CACHE_DIR
+
+    def ensure_worktrees_ignore_marker(self) -> None:
+        self.worktrees_path.mkdir(parents=True, exist_ok=True)
+        (self.worktrees_path / COLCON_IGNORE).touch()

@@ -47,6 +47,8 @@ class MetaWorkspaceManager:
         base_src = self._cfg.base_src_path
         validate_sub_repo_paths(base_src, sub_repo_paths)
 
+        self._cfg.ensure_worktrees_ignore_marker()
+
         # Create workspace scaffold
         ensure_dir(ws_path / "build")
         ensure_dir(ws_path / "install")
