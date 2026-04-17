@@ -9,7 +9,7 @@ from click.testing import CliRunner
 
 import cwm.util.ros_env as ros_env
 from cwm.cli.main import cli
-from cwm.core.config import Config
+from cwm.core.config import COLCON_IGNORE, Config
 from tests.conftest import make_git_repo
 
 
@@ -34,6 +34,7 @@ class TestCwmInit:
             assert (cwd / ".cwm").is_dir()
             assert (cwd / ".cwm" / "config.yaml").is_file()
             assert (cwd / "worktrees").is_dir()
+            assert (cwd / "worktrees" / COLCON_IGNORE).is_file()
             assert not (cwd / "base_ws").exists()
 
     def test_config_persisted(self, tmp_path: Path) -> None:

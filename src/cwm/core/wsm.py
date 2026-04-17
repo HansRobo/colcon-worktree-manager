@@ -68,7 +68,7 @@ class WorktreeStateManager:
         # Create CWM metadata dirs and the overlay worktrees directory
         ensure_dir(config.cwm_dir / "worktrees")
         ensure_dir(config.cwm_dir / "cache")
-        ensure_dir(config.worktrees_path)
+        config.ensure_worktrees_ignore_marker()
 
         config.save()
         return config
