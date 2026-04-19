@@ -15,6 +15,7 @@ class TestConfigSerialization:
         config = Config(
             underlay="/opt/ros/jazzy",
             worktrees_dir="worktrees",
+            repo="autoware.universe",
             project_root=tmp_path,
         )
         config.save()
@@ -22,6 +23,13 @@ class TestConfigSerialization:
         assert loaded.underlay == config.underlay
         assert loaded.symlink_install == config.symlink_install
         assert loaded.worktrees_dir == config.worktrees_dir
+        assert loaded.repo == "autoware.universe"
+
+    def test_roundtrip_without_repo(self, tmp_path: Path) -> None:
+        config = Config(underlay="/opt/ros/jazzy", repo=None, project_root=tmp_path)
+        config.save()
+        loaded = Config.load(tmp_path)
+        assert loaded.repo is None
 
     def test_derived_paths(self, tmp_path: Path) -> None:
         config = Config(project_root=tmp_path)
@@ -34,12 +42,22 @@ class TestConfigSerialization:
         ws = config.worktree_ws_path("feature/perception")
         assert "feature-perception_ws" in ws.name
 
-    def test_v1_config_raises_helpful_error(self, tmp_path: Path) -> None:
+    def test_old_config_raises_helpful_error(self, tmp_path: Path) -> None:
         import yaml
 
         (tmp_path / ".cwm").mkdir()
         (tmp_path / ".cwm" / "config.yaml").write_text(
-            yaml.safe_dump({"version": 1, "underlay": "/opt/ros/jazzy", "base_ws": {"path": "base_ws", "branch": "main"}})
+            yaml.safe_dump({"version": 1, "underlay": "/opt/ros/jazzy"})
+        )
+        with pytest.raises(ConfigVersionError, match="re-initialise"):
+            Config.load(tmp_path)
+
+    def test_v2_config_raises_helpful_error(self, tmp_path: Path) -> None:
+        import yaml
+
+        (tmp_path / ".cwm").mkdir()
+        (tmp_path / ".cwm" / "config.yaml").write_text(
+            yaml.safe_dump({"version": 2, "underlay": "/opt/ros/jazzy", "worktrees_dir": "worktrees"})
         )
         with pytest.raises(ConfigVersionError, match="re-initialise"):
             Config.load(tmp_path)
@@ -50,7 +68,7 @@ class TestConfigDefaults:
         config = Config()
         assert config.underlay == ""
 
-    def test_no_base_ws_in_config(self, tmp_path: Path) -> None:
+    def test_no_legacy_keys_in_config(self, tmp_path: Path) -> None:
         import yaml
 
         config = Config(project_root=tmp_path)
@@ -58,4 +76,14 @@ class TestConfigDefaults:
         data = yaml.safe_load((tmp_path / ".cwm" / "config.yaml").read_text())
         assert "mode" not in data
         assert "base_ws" not in data
+        assert "sub_repos" not in data
         assert "symlink_install" in data
+        assert data["version"] == 3
+
+    def test_repo_path_property(self, tmp_path: Path) -> None:
+        config = Config(project_root=tmp_path, repo="autoware.universe")
+        assert config.repo_path == tmp_path / "src" / "autoware.universe"
+
+    def test_repo_path_none_when_no_repo(self, tmp_path: Path) -> None:
+        config = Config(project_root=tmp_path, repo=None)
+        assert config.repo_path is None

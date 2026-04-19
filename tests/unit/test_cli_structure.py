@@ -36,6 +36,7 @@ class TestCliHelp:
             "cd",
             "shell-init",
             "worktree",
+            "repo",
             "ws",
             "inspect",
             "base",
@@ -49,11 +50,9 @@ class TestCliHelp:
         assert result.exit_code == 0, result.output
         assert _listed_commands(result.output) == [
             "add",
-            "rm",
+            "remove",
             "list",
-            "focus",
             "prune",
-            "rebase",
         ]
 
     def test_ws_help_lists_workspace_commands(self) -> None:

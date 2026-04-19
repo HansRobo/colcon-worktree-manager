@@ -30,12 +30,13 @@ def config(project_root: Path) -> Config:
     return Config.load(project_root)
 
 
-def _make_meta(branch: str, sub_repos: list[str] | None = None) -> WorktreeMeta:
+def _make_meta(branch: str, repo: str = "my_repo") -> WorktreeMeta:
     return WorktreeMeta(
         branch=branch,
         created_at="2025-01-01T00:00:00",
+        repo=repo,
         base_sha="abc123",
-        sub_repos=sub_repos or [],
+        base_branch="main",
     )
 
 
@@ -77,52 +78,54 @@ class TestResolveBase:
 
 class TestResolveBranch:
     def test_returns_worktree_root(self, project_root: Path):
-        meta = _make_meta("feature-x", ["core/repo_a"])
+        meta = _make_meta("feature-x")
         with patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root):
             with patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM:
                 MockWSM.return_value.list_worktrees.return_value = [meta]
                 result = _resolve(("feature-x",))
         assert result == str(project_root / "worktrees" / "feature-x_ws")
 
-    def test_returns_sub_repo_path(self, project_root: Path):
-        meta = _make_meta("feature-x", ["core/repo_a", "core/repo_b"])
+    def test_returns_repo_checkout_with_repo_arg(self, project_root: Path, tmp_path: Path):
+        meta = _make_meta("feature-x", repo="my_repo")
+        checkout = project_root / "worktrees" / "feature-x_ws" / "src" / "my_repo"
+        checkout.mkdir(parents=True)
         with patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root):
             with patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM:
                 MockWSM.return_value.list_worktrees.return_value = [meta]
                 MockWSM.return_value.get_worktree_meta.return_value = meta
-                result = _resolve(("feature-x", "core/repo_a"))
-        assert result == str(project_root / "worktrees" / "feature-x_ws" / "src" / "core" / "repo_a")
+                result = _resolve(("feature-x", "my_repo"))
+        assert result == str(checkout)
 
-    def test_error_on_unknown_sub_repo(self, project_root: Path):
-        meta = _make_meta("feature-x", ["core/repo_a"])
+    def test_error_on_unknown_repo_arg(self, project_root: Path):
+        meta = _make_meta("feature-x", repo="my_repo")
         with patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root):
             with patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM:
                 MockWSM.return_value.list_worktrees.return_value = [meta]
                 MockWSM.return_value.get_worktree_meta.return_value = meta
-                with pytest.raises(CWMError, match="Sub-repo 'missing' not found"):
-                    _resolve(("feature-x", "missing"))
+                with pytest.raises(CWMError, match="not found"):
+                    _resolve(("feature-x", "wrong_repo"))
 
 
 # ---------------------------------------------------------------------------
-# _resolve: sub-repo in active worktree
+# _resolve: repo name in active worktree
 # ---------------------------------------------------------------------------
 
 
-class TestResolveActiveSubRepo:
-    def test_returns_sub_repo_in_active_worktree(
+class TestResolveActiveRepo:
+    def test_returns_repo_checkout_in_active_worktree(
         self, project_root: Path, monkeypatch: pytest.MonkeyPatch
     ):
         ws = str(project_root / "worktrees" / "feat_ws")
         monkeypatch.setenv("CWM_WORKSPACE", ws)
         monkeypatch.setenv("CWM_WORKTREE", "feat")
 
-        meta = _make_meta("feat", ["core/repo_a"])
+        meta = _make_meta("feat", repo="my_repo")
         with patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root):
             with patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM:
                 MockWSM.return_value.list_worktrees.return_value = [meta]
                 MockWSM.return_value.get_worktree_meta.return_value = meta
-                result = _resolve(("core/repo_a",))
-        assert result == str(project_root / "worktrees" / "feat_ws" / "src" / "core" / "repo_a")
+                result = _resolve(("my_repo",))
+        assert result == str(project_root / "worktrees" / "feat_ws" / "src" / "my_repo")
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +139,7 @@ class TestResolveUnknown:
         with patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root):
             with patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM:
                 MockWSM.return_value.list_worktrees.return_value = []
-                with pytest.raises(CWMError, match="No worktree or sub-repo found"):
+                with pytest.raises(CWMError, match="No worktree or repository found"):
                     _resolve(("nonexistent",))
 
 
@@ -167,7 +170,7 @@ class TestCdResolveCommand:
             runner = CliRunner()
             result = runner.invoke(cd_resolve, ["nonexistent"])
         assert result.exit_code == 1
-        assert "No worktree or sub-repo found" in result.output
+        assert "No worktree or repository found" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -176,27 +179,32 @@ class TestCdResolveCommand:
 
 
 class TestResolveAutoSubrepo:
-    def test_no_args_returns_sole_subrepo(
+    def test_no_args_goes_to_repo_checkout_when_it_exists(
         self, project_root: Path, monkeypatch: pytest.MonkeyPatch
     ):
         ws = str(project_root / "worktrees" / "feat_ws")
         monkeypatch.setenv("CWM_WORKSPACE", ws)
         monkeypatch.setenv("CWM_WORKTREE", "feat")
-        meta = _make_meta("feat", ["core/repo_a"])
+
+        checkout = project_root / "worktrees" / "feat_ws" / "src" / "my_repo"
+        checkout.mkdir(parents=True)
+
+        meta = _make_meta("feat", repo="my_repo")
         with patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root):
             with patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM:
                 MockWSM.return_value.list_worktrees.return_value = [meta]
                 MockWSM.return_value.get_worktree_meta.return_value = meta
                 result = _resolve((), auto_subrepo=True)
-        assert result == str(project_root / "worktrees" / "feat_ws" / "src" / "core" / "repo_a")
+        assert result == str(checkout)
 
-    def test_no_args_returns_workspace_when_multiple_subrepos(
+    def test_no_args_returns_workspace_when_checkout_missing(
         self, project_root: Path, monkeypatch: pytest.MonkeyPatch
     ):
         ws = str(project_root / "worktrees" / "feat_ws")
         monkeypatch.setenv("CWM_WORKSPACE", ws)
         monkeypatch.setenv("CWM_WORKTREE", "feat")
-        meta = _make_meta("feat", ["core/repo_a", "core/repo_b"])
+
+        meta = _make_meta("feat", repo="my_repo")
         with patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root):
             with patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM:
                 MockWSM.return_value.list_worktrees.return_value = [meta]
@@ -204,25 +212,17 @@ class TestResolveAutoSubrepo:
                 result = _resolve((), auto_subrepo=True)
         assert result == ws
 
-    def test_branch_arg_returns_sole_subrepo(self, project_root: Path):
-        meta = _make_meta("feature-x", ["core/repo_a"])
-        with patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root):
-            with patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM:
-                MockWSM.return_value.list_worktrees.return_value = [meta]
-                MockWSM.return_value.get_worktree_meta.return_value = meta
-                result = _resolve(("feature-x",), auto_subrepo=True)
-        assert result == str(
-            project_root / "worktrees" / "feature-x_ws" / "src" / "core" / "repo_a"
-        )
+    def test_branch_arg_goes_to_repo_checkout_when_exists(self, project_root: Path):
+        checkout = project_root / "worktrees" / "feature-x_ws" / "src" / "my_repo"
+        checkout.mkdir(parents=True)
 
-    def test_branch_arg_returns_workspace_when_multiple_subrepos(self, project_root: Path):
-        meta = _make_meta("feature-x", ["core/repo_a", "core/repo_b"])
+        meta = _make_meta("feature-x", repo="my_repo")
         with patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root):
             with patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM:
                 MockWSM.return_value.list_worktrees.return_value = [meta]
                 MockWSM.return_value.get_worktree_meta.return_value = meta
                 result = _resolve(("feature-x",), auto_subrepo=True)
-        assert result == str(project_root / "worktrees" / "feature-x_ws")
+        assert result == str(checkout)
 
 
 # ---------------------------------------------------------------------------
@@ -231,13 +231,17 @@ class TestResolveAutoSubrepo:
 
 
 class TestCdResolveAutoSubrepo:
-    def test_auto_subrepo_flag_selects_sole_subrepo(
+    def test_auto_subrepo_flag_selects_repo_checkout(
         self, project_root: Path, monkeypatch: pytest.MonkeyPatch
     ):
         ws = str(project_root / "worktrees" / "feat_ws")
         monkeypatch.setenv("CWM_WORKSPACE", ws)
         monkeypatch.setenv("CWM_WORKTREE", "feat")
-        meta = _make_meta("feat", ["core/repo_a"])
+
+        checkout = project_root / "worktrees" / "feat_ws" / "src" / "my_repo"
+        checkout.mkdir(parents=True)
+
+        meta = _make_meta("feat", repo="my_repo")
         with (
             patch("cwm.cli.cd_cmd.find_project_root", return_value=project_root),
             patch("cwm.cli.cd_cmd.WorktreeStateManager") as MockWSM,
@@ -247,9 +251,7 @@ class TestCdResolveAutoSubrepo:
             runner = CliRunner()
             result = runner.invoke(cd_resolve, ["--auto-subrepo"])
         assert result.exit_code == 0
-        assert result.output.strip() == str(
-            project_root / "worktrees" / "feat_ws" / "src" / "core" / "repo_a"
-        )
+        assert result.output.strip() == str(checkout)
 
 
 # ---------------------------------------------------------------------------

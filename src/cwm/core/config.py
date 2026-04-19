@@ -15,7 +15,7 @@ WORKTREES_META_DIR = "worktrees"
 CACHE_DIR = "cache"
 COLCON_IGNORE = "COLCON_IGNORE"
 
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
 
 
 @dataclass
@@ -26,6 +26,7 @@ class Config:
     underlay: str = ""
     symlink_install: bool = True
     worktrees_dir: str = "worktrees"
+    repo: str | None = None  # relative path under src/ of the tracked git repo
 
     # Runtime-only (not serialised)
     project_root: Path = field(default=Path("."), repr=False)
@@ -34,12 +35,15 @@ class Config:
 
     def to_dict(self) -> dict:
         """Serialise to a plain dict (excluding runtime fields)."""
-        return {
+        d: dict = {
             "version": self.version,
             "underlay": self.underlay,
             "symlink_install": self.symlink_install,
             "worktrees_dir": self.worktrees_dir,
         }
+        if self.repo is not None:
+            d["repo"] = self.repo
+        return d
 
     @classmethod
     def from_dict(cls, data: dict, project_root: Path) -> Config:
@@ -49,6 +53,7 @@ class Config:
             underlay=data.get("underlay", "/opt/ros/jazzy"),
             symlink_install=data.get("symlink_install", True),
             worktrees_dir=data.get("worktrees_dir", "worktrees"),
+            repo=data.get("repo") or None,
             project_root=project_root,
         )
 
@@ -74,7 +79,7 @@ class Config:
         if version < CONFIG_VERSION:
             raise ConfigVersionError(
                 f"CWM config at {config_path} uses version {version} (current: {CONFIG_VERSION}).\n"
-                "The workspace layout has changed: the project root is now the base workspace.\n"
+                "The config schema has changed: a single tracked repository is now required.\n"
                 "Please re-initialise with: cwm init"
             )
 
@@ -85,6 +90,18 @@ class Config:
     @property
     def cwm_dir(self) -> Path:
         return self.project_root / CONFIG_DIR
+
+    @property
+    def repo_name(self) -> str:
+        """Basename of the tracked repository path (e.g. 'autoware.universe')."""
+        return Path(self.repo).name if self.repo else ""
+
+    @property
+    def repo_path(self) -> Path | None:
+        """Absolute path to the tracked git repository, or None if not selected."""
+        if self.repo is None:
+            return None
+        return self.base_src_path / self.repo
 
     @property
     def base_src_path(self) -> Path:

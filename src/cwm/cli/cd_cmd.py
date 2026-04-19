@@ -7,7 +7,7 @@ import sys
 
 import click
 
-from cwm.cli.completion import complete_cd_repos, complete_cd_targets, complete_worktree_branches, complete_worktree_sub_repos
+from cwm.cli.completion import complete_cd_repos, complete_cd_targets, complete_worktree_branches
 from cwm.cli.main import cli
 from cwm.core.config import Config
 from cwm.core.wsm import WorktreeStateManager
@@ -45,7 +45,7 @@ def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
     config = Config.load(root)
     wsm = WorktreeStateManager(config)
 
-    # No args → active workspace root (or sole sub-repo when auto_subrepo)
+    # No args → active workspace root (or repo checkout when auto_subrepo)
     if not args:
         ws = os.environ.get("CWM_WORKSPACE")
         if ws:
@@ -54,8 +54,10 @@ def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
                 if branch:
                     try:
                         meta = wsm.get_worktree_meta(branch)
-                        if len(meta.sub_repos or []) == 1:
-                            return str(config.worktree_src_path(branch) / meta.sub_repos[0])
+                        if meta.repo:
+                            checkout = config.worktree_src_path(branch) / meta.repo_name
+                            if checkout.exists():
+                                return str(checkout)
                     except CWMError:
                         pass
             return ws
@@ -72,41 +74,43 @@ def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
     # Defer branch list until actually needed
     branches = [m.branch for m in wsm.list_worktrees()]
 
-    # Branch match → workspace root (or sole sub-repo when auto_subrepo) or named sub-repo
+    # Branch match → workspace root (or repo checkout when auto_subrepo) or named repo
     if target in branches:
         ws_path = config.worktree_ws_path(target)
         if len(args) == 1:
             if auto_subrepo:
                 try:
                     meta = wsm.get_worktree_meta(target)
-                    if len(meta.sub_repos or []) == 1:
-                        return str(config.worktree_src_path(target) / meta.sub_repos[0])
+                    if meta.repo:
+                        checkout = config.worktree_src_path(target) / meta.repo_name
+                        if checkout.exists():
+                            return str(checkout)
                 except CWMError:
                     pass
             return str(ws_path)
-        repo = args[1]
+        repo_arg = args[1]
         meta = wsm.get_worktree_meta(target)
-        if repo not in (meta.sub_repos or []):
+        if repo_arg not in (meta.repo, meta.repo_name):
             raise CWMError(
-                f"Sub-repo '{repo}' not found in worktree '{target}'. "
-                f"Available: {', '.join(meta.sub_repos or [])}"
+                f"Repository '{repo_arg}' not found in worktree '{target}'. "
+                f"Tracked repo: {meta.repo or 'none'}"
             )
-        return str(config.worktree_src_path(target) / repo)
+        return str(config.worktree_src_path(target) / meta.repo_name)
 
-    # Active worktree → sub-repo within it
+    # Active worktree → repo checkout within it
     ws = os.environ.get("CWM_WORKSPACE")
     if ws:
         branch = os.environ.get("CWM_WORKTREE", "")
         if branch:
             try:
                 meta = wsm.get_worktree_meta(branch)
-                if target in (meta.sub_repos or []):
-                    return str(config.worktree_src_path(branch) / target)
+                if meta.repo and target in (meta.repo, meta.repo_name):
+                    return str(config.worktree_src_path(branch) / meta.repo_name)
             except CWMError:
                 pass
 
     raise CWMError(
-        f"No worktree or sub-repo found for '{target}'. "
+        f"No worktree or repository found for '{target}'. "
         "Use 'cwm worktree list' to see available branches."
     )
 
@@ -143,7 +147,7 @@ def cd(target: str | None, repo: str | None) -> None:
 
 @cli.command("switch")
 @click.argument("branch", shell_complete=complete_worktree_branches)
-@click.argument("repo", required=False, default=None, shell_complete=complete_worktree_sub_repos)
+@click.argument("repo", required=False, default=None, shell_complete=complete_cd_repos)
 def switch(branch: str, repo: str | None) -> None:
     """Activate a worktree and navigate to it in one step.
 

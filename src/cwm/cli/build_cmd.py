@@ -82,8 +82,10 @@ def build(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_arg
         cdc = ColconDiscoveryController(src_path)
 
         from cwm.core.wsm import WorktreeMeta
+        from pathlib import Path as _Path
         meta = WorktreeMeta.load(config.worktree_meta_path(branch))
-        changed_files = cdc.get_changed_files_meta(meta.sub_repos, meta.sub_repo_shas)
+        repo_name = _Path(meta.repo).name if meta.repo else ""
+        changed_files = cdc.get_changed_files_meta([repo_name], {repo_name: meta.base_sha})
         changed = cdc.get_changed_packages(dga, changed_files)
 
         if not changed:

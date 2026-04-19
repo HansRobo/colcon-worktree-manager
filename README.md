@@ -36,24 +36,32 @@ deactivate
 
 ### Adopting an existing workspace
 
-If you already have a colcon workspace (e.g. `~/ws/ibis_ws` with `src/` populated):
+If you already have a colcon workspace (e.g. `~/ws/ibis_ws` with `src/autoware.universe/` cloned):
 
 ```bash
 cd ~/ws/ibis_ws
-cwm init          # ROS 2 underlay is auto-detected
+cwm init                           # ROS 2 underlay auto-detected; repo auto-selected if unique
 cwm worktree add feature-perception
 cwm activate feature-perception
 cwm ws build
 cwm deactivate
 ```
 
+If multiple repositories are in `src/`, select which one to track:
+
+```bash
+cwm repo switch autoware.universe
+cwm worktree add feature-perception
+```
+
 ### Starting fresh
 
 ```bash
 mkdir my_ws && cd my_ws
-cwm init          # creates .cwm/ and worktrees/ only
+cwm init                           # creates .cwm/ and worktrees/ only
 mkdir src
-git clone <your-repo> src/
+git clone <your-repo> src/my_repo
+cwm repo switch my_repo            # track this repository
 colcon build --symlink-install
 cwm worktree add feature-perception
 cwm activate feature-perception
@@ -67,12 +75,19 @@ cwm deactivate
 
 | Command | Description |
 |---------|-------------|
-| `cwm init [--underlay PATH]` | Initialise a CWM project (underlay auto-detected from `/opt/ros/`) |
+| `cwm init [--underlay PATH] [--repo PATH]` | Initialise a CWM project (underlay auto-detected; repo auto-selected if `src/` has a single git repo) |
 | `cwm activate [branch]` | Activate a worktree environment (interactive menu when branch is omitted) |
 | `cwm deactivate` | Restore the previous environment (provided by shell integration) |
-| `cwm switch <branch> [repo]` | Activate a worktree **and** navigate to it in one step; auto-selects the directory when only one sub-repo is managed |
-| `cwm cd [branch\|repo\|base] [repo]` | Jump to a worktree root or sub-repository via shell integration |
+| `cwm switch <branch>` | Activate a worktree **and** navigate to it in one step |
+| `cwm cd [branch\|repo\|base]` | Jump to a worktree root or repository checkout via shell integration |
 | `cwm shell-init` | Print the shell integration function — add `eval "$(cwm shell-init)"` to `.bashrc` |
+
+### Repository management
+
+| Command | Description |
+|---------|-------------|
+| `cwm repo show` | Show the currently tracked git repository |
+| `cwm repo switch <path>` | Change the tracked repository (relative to `src/`) |
 
 ### Workspace operations
 
@@ -86,12 +101,12 @@ cwm deactivate
 
 | Command | Description |
 |---------|-------------|
-| `cwm worktree add <branch> [--repos PATH]` | Create a new overlay worktree (optionally limit to specific sub-repos) |
-| `cwm worktree rm <branch> [--force]` | Remove a worktree and its artifacts |
+| `cwm worktree add <branch>` | Create a new overlay worktree for the tracked repository |
+| `cwm worktree remove <branch> [--force] [--delete-branch]` | Remove a worktree and its artifacts; also syncs `git worktree` state |
 | `cwm worktree list` | List all managed worktrees |
-| `cwm worktree focus <branch> [--add PATH\|--rm PATH\|--list]` | Add, remove, or list sub-repository worktrees for a branch |
-| `cwm worktree prune [--force]` | Remove stale worktree state |
-| `cwm worktree rebase <branch>` | Rebase a worktree branch onto the current base |
+| `cwm worktree prune [--force]` | Remove stale worktree state and run `git worktree prune` |
+
+Several commands accept `--json` for machine-readable output: `cwm ws status`, `cwm worktree add`, `cwm worktree remove`, and `cwm worktree list`.
 
 ### Inspection / tooling
 
@@ -104,9 +119,7 @@ cwm deactivate
 
 | Command | Description |
 |---------|-------------|
-| `cwm base update` | Pull and rebuild the base workspace |
-
-Several commands accept `--json` for machine-readable output: `cwm ws status`, `cwm worktree add`, `cwm worktree rm`, and `cwm worktree list`.
+| `cwm base update` | Pull the tracked repository and rebuild the base workspace |
 
 ### colcon passthrough
 
@@ -136,18 +149,23 @@ CWM consists of three core modules:
 
 ### Directory Structure
 
-CWM treats the workspace root itself as the base workspace — matching standard colcon conventions:
+CWM treats the workspace root itself as the base workspace — matching standard colcon conventions.
+Each worktree contains a checkout of the single tracked repository under `src/<repo-name>/`:
 
 ```
-my_ws/                 # project root = base colcon workspace
-├── .cwm/              # CWM metadata and config
-├── src/               # base source tree (existing or cloned by you)
+my_ws/                      # project root = base colcon workspace
+├── .cwm/                   # CWM metadata and config
+│   ├── config.yaml         # underlay, tracked repo, worktrees_dir
+│   └── worktrees/          # per-branch metadata YAML files
+├── src/
+│   └── autoware.universe/  # the single tracked git repository
 ├── build/
 ├── install/
 ├── log/
-└── worktrees/         # overlay worktrees (created by cwm worktree add)
+└── worktrees/              # overlay worktrees (created by cwm worktree add)
     └── feature-X_ws/
-        ├── src/       # git worktree checkouts
+        ├── src/
+        │   └── autoware.universe/  # git worktree checkout
         ├── build/
         ├── install/
         └── log/
@@ -155,7 +173,7 @@ my_ws/                 # project root = base colcon workspace
 
 ## Shell Completion
 
-`cwm` supports tab completion for subcommands, worktree branch names, sub-repository paths, and ROS 2 underlay paths.
+`cwm` supports tab completion for subcommands, worktree branch names, and ROS 2 underlay paths.
 
 **Bash** — add to `~/.bashrc`:
 
@@ -183,16 +201,10 @@ _CWM_COMPLETE=bash_source cwm > ~/.cwm-complete.bash
 source ~/.cwm-complete.bash
 ```
 
-What gets completed:
-
 | Argument / Option | Completion |
 |---|---|
-| `cwm worktree add BRANCH` | Local and remote git branch names |
-| `cwm worktree rm BRANCH` | Existing CWM worktree names |
-| `cwm worktree focus BRANCH` | Existing CWM worktree names |
-| `cwm worktree add --repos` | Sub-repository paths under `src/` |
-| `cwm worktree focus --add` | Sub-repository paths under `src/` |
-| `cwm worktree focus --rm` | Sub-repositories active in the worktree |
+| `cwm worktree add BRANCH` | Local and remote git branch names from the tracked repo |
+| `cwm worktree remove BRANCH` | Existing CWM worktree names |
 | `cwm activate BRANCH` | Existing CWM worktree names |
 | `cwm init --underlay` | Detected ROS 2 distro paths (`/opt/ros/*`) |
 
