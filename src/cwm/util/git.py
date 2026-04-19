@@ -108,7 +108,7 @@ def list_branches(*, cwd: Path | None = None, include_remote: bool = True) -> li
         cwd=cwd,
         check=False,
     )
-    branches: list[str] = [b.strip() for b in result.stdout.splitlines() if b.strip()]
+    seen: set[str] = {b.strip() for b in result.stdout.splitlines() if b.strip()}
 
     if include_remote:
         remote_result = _run(
@@ -120,12 +120,10 @@ def list_branches(*, cwd: Path | None = None, include_remote: bool = True) -> li
             name = line.strip()
             if not name or "->" in name:
                 continue
-            # Strip "origin/" prefix to get the short branch name
             short = name.split("/", 1)[1] if "/" in name else name
-            if short not in branches:
-                branches.append(short)
+            seen.add(short)
 
-    return sorted(branches)
+    return sorted(seen)
 
 
 def branch_exists(branch: str, *, cwd: Path | None = None) -> bool:
@@ -197,6 +195,12 @@ def worktree_remove(path: Path, *, force: bool = False, cwd: Path | None = None)
     if force:
         args.append("--force")
     args.append(str(path))
+    _run(args, cwd=cwd)
+
+
+def branch_delete(branch: str, *, force: bool = False, cwd: Path | None = None) -> None:
+    """Delete a local branch."""
+    args = ["branch", "-D" if force else "-d", branch]
     _run(args, cwd=cwd)
 
 

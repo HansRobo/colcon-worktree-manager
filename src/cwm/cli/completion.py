@@ -10,12 +10,8 @@ import click
 from click.shell_completion import CompletionItem
 
 
-# -- Cached loader (per process, safe for completion) ------------------------
-
-
 @lru_cache(maxsize=1)
 def _load_config_and_wsm():
-    """Load Config and WSM once per completion invocation."""
     from cwm.core.config import Config
     from cwm.core.wsm import WorktreeStateManager
     from cwm.util.fs import find_project_root
@@ -25,14 +21,8 @@ def _load_config_and_wsm():
     return config, WorktreeStateManager(config)
 
 
-# -- Internal helper ---------------------------------------------------------
-
-
 def _match(items: Iterable[str], incomplete: str) -> list[CompletionItem]:
     return [CompletionItem(s) for s in items if s.startswith(incomplete)]
-
-
-# -- Completion callbacks ----------------------------------------------------
 
 
 def complete_worktree_branches(
@@ -49,40 +39,13 @@ def complete_worktree_branches(
 def complete_git_branches(
     ctx: click.Context, param: click.Parameter, incomplete: str
 ) -> list[CompletionItem]:
-    """Complete with git branch names (local + remote) for creating a new worktree."""
+    """Complete with git branch names from the tracked repository."""
     try:
         from cwm.util.git import list_branches
 
         config, _ = _load_config_and_wsm()
-        return _match(list_branches(cwd=config.project_root, include_remote=True), incomplete)
-    except Exception:
-        return []
-
-
-def complete_sub_repos(
-    ctx: click.Context, param: click.Parameter, incomplete: str
-) -> list[CompletionItem]:
-    """Complete with discovered sub-repo relative paths under base_ws/src/."""
-    try:
-        from cwm.util.repos import discover_sub_repos
-
-        config, _ = _load_config_and_wsm()
-        return _match(discover_sub_repos(config.base_src_path), incomplete)
-    except Exception:
-        return []
-
-
-def complete_worktree_sub_repos(
-    ctx: click.Context, param: click.Parameter, incomplete: str
-) -> list[CompletionItem]:
-    """Complete with sub-repos active in the worktree named by ctx.params['branch']."""
-    try:
-        _, wsm = _load_config_and_wsm()
-        branch = ctx.params.get("branch")
-        if not branch:
-            return []
-        meta = wsm.get_worktree_meta(branch)
-        return _match(meta.sub_repos or [], incomplete)
+        cwd = config.repo_path or config.project_root
+        return _match(list_branches(cwd=cwd, include_remote=True), incomplete)
     except Exception:
         return []
 
@@ -102,15 +65,19 @@ def complete_distros(
 def complete_cd_targets(
     ctx: click.Context, param: click.Parameter, incomplete: str
 ) -> list[CompletionItem]:
-    """Complete cwm cd first argument: 'base', branch names, and active sub-repos."""
+    """Complete cwm cd first argument: 'base', branch names, and active repo name."""
     items = ["base"]
     try:
-        _, wsm = _load_config_and_wsm()
+        config, wsm = _load_config_and_wsm()
         items.extend(m.branch for m in wsm.list_worktrees())
         branch = os.environ.get("CWM_WORKTREE")
         if os.environ.get("CWM_WORKSPACE") and branch:
-            meta = wsm.get_worktree_meta(branch)
-            items.extend(meta.sub_repos or [])
+            try:
+                meta = wsm.get_worktree_meta(branch)
+                if meta.repo:
+                    items.append(meta.repo_name)
+            except Exception:
+                pass
     except Exception:
         pass
     return _match(items, incomplete)
@@ -119,13 +86,15 @@ def complete_cd_targets(
 def complete_cd_repos(
     ctx: click.Context, param: click.Parameter, incomplete: str
 ) -> list[CompletionItem]:
-    """Complete cwm cd second argument with sub-repos for the branch in ctx.params['target']."""
+    """Complete cwm cd second argument with the repo name for the branch in ctx.params['target']."""
     try:
         _, wsm = _load_config_and_wsm()
         target = ctx.params.get("target")
         if not target:
             return []
         meta = wsm.get_worktree_meta(target)
-        return _match(meta.sub_repos or [], incomplete)
+        if meta.repo:
+            return _match([meta.repo_name], incomplete)
+        return []
     except Exception:
         return []

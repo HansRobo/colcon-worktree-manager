@@ -37,8 +37,12 @@ class UnderlayNotFoundError(CWMError):
     """The specified underlay path does not exist or is invalid."""
 
 
-class SubRepoNotFoundError(CWMError):
-    """The specified sub-repository path does not exist or is not a git repository."""
+class RepoNotFoundError(CWMError):
+    """The specified repository path does not exist or is not a git repository."""
+
+
+class NoRepoSelectedError(CWMError):
+    """No repository has been selected; run 'cwm repo switch <path>' first."""
 
 
 class BranchNameCollisionError(CWMError):

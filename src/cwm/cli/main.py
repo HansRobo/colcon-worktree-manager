@@ -129,6 +129,7 @@ cli.command_order = [
     "cd",
     "shell-init",
     "worktree",
+    "repo",
     "ws",
     "inspect",
     "base",
@@ -140,6 +141,7 @@ cli.moved_commands = {
     "status": "ws status",
     "env": "inspect env",
     "detect": "inspect detect",
+    "rm": "worktree remove",
 }
 
 
@@ -148,7 +150,7 @@ def worktree() -> None:
     """Manage worktree overlay workspaces."""
 
 
-worktree.command_order = ["add", "rm", "list", "focus", "prune", "rebase"]
+worktree.command_order = ["add", "remove", "list", "prune"]
 
 
 @cli.group()
@@ -182,7 +184,7 @@ import cwm.cli.activate_cmd  # noqa: E402, F401
 import cwm.cli.cd_cmd  # noqa: E402, F401
 import cwm.cli.shell_init_cmd  # noqa: E402, F401
 import cwm.cli.worktree_cmd  # noqa: E402, F401
-import cwm.cli.focus_cmd  # noqa: E402, F401
+import cwm.cli.repo_cmd  # noqa: E402, F401
 import cwm.cli.build_cmd  # noqa: E402, F401
 import cwm.cli.clean_cmd  # noqa: E402, F401
 import cwm.cli.status_cmd  # noqa: E402, F401

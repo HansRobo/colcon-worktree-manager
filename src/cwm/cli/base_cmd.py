@@ -19,37 +19,32 @@ from cwm.util.fs import find_project_root
     help="Only pull the latest changes without building.",
 )
 def update(no_build: bool) -> None:
-    """Sync the base workspace with the main branch and rebuild."""
+    """Sync the tracked repository with the remote and rebuild the base workspace."""
     try:
         root = find_project_root()
         config = Config.load(root)
-        src_path = config.base_src_path
 
-        if not src_path.exists():
+        if config.repo is None:
             raise CWMError(
-                f"Base workspace source not found: {src_path}\n"
-                "Clone your repositories into src/ first."
+                "No repository selected.\n"
+                "Run: cwm repo switch <path>"
             )
 
-        from cwm.util.repos import discover_sub_repos
-        sub_repos = discover_sub_repos(src_path)
-        if not sub_repos:
+        repo_path = config.repo_path
+        if not repo_path or not repo_path.exists():
             raise CWMError(
-                f"No repositories found in {src_path}.\n"
-                "Clone your repositories into src/ first."
+                f"Tracked repository not found: {repo_path}\n"
+                "Clone your repository into src/ first."
             )
 
-        click.echo("Pulling repositories...")
-        for rel, abs_path in sub_repos.items():
-            click.echo(f"  {rel}...")
-            git.pull(cwd=abs_path)
+        click.echo(f"Pulling {config.repo}...")
+        git.pull(cwd=repo_path)
         click.echo("  Pull complete.")
 
         if no_build:
             click.echo("Skipping build (--no-build).")
             return
 
-        # Build base workspace
         click.echo("Building base workspace...")
         build_args = []
         if config.symlink_install:

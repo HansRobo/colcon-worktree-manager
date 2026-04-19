@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+import shutil
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
 from cwm.core.config import Config
-from cwm.errors import BranchNameCollisionError, GitError, WorktreeNotFoundError
+from cwm.errors import (
+    BranchNameCollisionError,
+    GitError,
+    NoRepoSelectedError,
+    WorktreeExistsError,
+    WorktreeNotFoundError,
+)
 from cwm.util import git
 from cwm.util.fs import ensure_dir
 
@@ -19,25 +27,40 @@ class WorktreeMeta:
 
     branch: str
     created_at: str
+    repo: str         # relative path under src/ of the tracked repo at creation time
     base_sha: str
-    sub_repos: list = field(default_factory=list)
-    sub_repo_shas: dict = field(default_factory=dict)
-    sub_repo_branches: dict = field(default_factory=dict)
+    base_branch: str = ""  # branch of the repo when the worktree was created
+
+    @property
+    def repo_name(self) -> str:
+        return Path(self.repo).name if self.repo else ""
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as fh:
-            yaml.safe_dump(asdict(self), fh, default_flow_style=False)
+            yaml.safe_dump(
+                {
+                    "branch": self.branch,
+                    "created_at": self.created_at,
+                    "repo": self.repo,
+                    "base_sha": self.base_sha,
+                    "base_branch": self.base_branch,
+                },
+                fh,
+                default_flow_style=False,
+            )
 
     @classmethod
     def load(cls, path: Path) -> WorktreeMeta:
         with open(path) as fh:
             data = yaml.safe_load(fh)
-        data.pop("mode", None)
-        data.setdefault("sub_repos", [])
-        data.setdefault("sub_repo_shas", {})
-        data.setdefault("sub_repo_branches", {})
-        return cls(**data)
+        return cls(
+            branch=data["branch"],
+            created_at=data.get("created_at", ""),
+            repo=data.get("repo", ""),
+            base_sha=data.get("base_sha", ""),
+            base_branch=data.get("base_branch", ""),
+        )
 
 
 class WorktreeStateManager:
@@ -53,19 +76,21 @@ class WorktreeStateManager:
         project_root: Path,
         *,
         underlay: str,
+        repo: str | None = None,
     ) -> Config:
         """Initialise a new CWM project at *project_root*.
 
         Creates .cwm/ metadata directories and worktrees/ directory.
         The project root is treated as the base colcon workspace; an existing
-        src/ tree is adopted as-is.
+        src/ tree is adopted as-is.  *repo* is the relative path (under src/)
+        of the git repository to track.
         """
         config = Config(
             underlay=underlay,
+            repo=repo,
             project_root=project_root,
         )
 
-        # Create CWM metadata dirs and the overlay worktrees directory
         ensure_dir(config.cwm_dir / "worktrees")
         ensure_dir(config.cwm_dir / "cache")
         config.ensure_worktrees_ignore_marker()
@@ -75,19 +100,17 @@ class WorktreeStateManager:
 
     # -- Worktree lifecycle ----------------------------------------------------
 
-    def create_worktree(
-        self,
-        branch: str,
-        sub_repos: list[str],
-    ) -> Path:
+    def create_worktree(self, branch: str) -> Path:
         """Create a new overlay worktree for *branch*.
 
-        *sub_repos* is a list of sub-repository paths (relative to
-        ``base_ws/src/``) to add as git worktrees.
-
-        Returns the workspace root path (worktrees/<branch>_ws/).
+        Uses the repository tracked in the config.  Returns the workspace root
+        path (worktrees/<branch>_ws/).
         """
-        # Detect branch name collision (e.g. feature/foo vs feature-foo → same directory)
+        if self._cfg.repo is None:
+            raise NoRepoSelectedError(
+                "No repository selected. Run 'cwm repo switch <path>' first."
+            )
+
         safe_name = self._cfg.safe_branch_name(branch)
         for existing in self.list_worktrees():
             if existing.branch != branch and self._cfg.safe_branch_name(existing.branch) == safe_name:
@@ -96,13 +119,92 @@ class WorktreeStateManager:
                     f"(both map to '{safe_name}_ws'). Use a different branch name."
                 )
 
-        from cwm.core.meta_wsm import MetaWorkspaceManager
-        return MetaWorkspaceManager(self._cfg).create_worktree(branch, sub_repos)
+        repo_rel = self._cfg.repo
+        base_repo = self._cfg.base_src_path / repo_rel
+        repo_name = self._cfg.repo_name
+        ws_path = self._cfg.worktree_ws_path(branch)
 
-    def remove_worktree(self, branch: str, *, force: bool = False) -> None:
-        """Remove an overlay worktree and its build artifacts."""
-        from cwm.core.meta_wsm import MetaWorkspaceManager
-        MetaWorkspaceManager(self._cfg).remove_worktree(branch, force=force)
+        if ws_path.exists():
+            raise WorktreeExistsError(f"Worktree workspace already exists: {ws_path}")
+
+        self._cfg.ensure_worktrees_ignore_marker()
+        ensure_dir(ws_path / "build")
+        ensure_dir(ws_path / "install")
+        ensure_dir(ws_path / "log")
+        checkout = ws_path / "src" / repo_name
+        ensure_dir(checkout.parent)
+
+        git.worktree_add(checkout, branch, create_branch=True, cwd=base_repo)
+
+        try:
+            base_sha = git.get_head_sha(cwd=base_repo)
+        except GitError:
+            base_sha = ""
+        try:
+            base_branch = git.get_current_branch(cwd=base_repo)
+        except GitError:
+            base_branch = ""
+
+        WorktreeMeta(
+            branch=branch,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            repo=repo_rel,
+            base_sha=base_sha,
+            base_branch=base_branch,
+        ).save(self._cfg.worktree_meta_path(branch))
+
+        return ws_path
+
+    def remove_worktree(
+        self,
+        branch: str,
+        *,
+        force: bool = False,
+        delete_branch: bool = False,
+    ) -> None:
+        """Remove an overlay worktree and its build artifacts.
+
+        Idempotent: safe to call even if the workspace directory was already
+        manually deleted.  Always runs 'git worktree prune' to clean up stale
+        git-side references.
+        """
+        meta_path = self._cfg.worktree_meta_path(branch)
+        ws_path = self._cfg.worktree_ws_path(branch)
+        meta = WorktreeMeta.load(meta_path) if meta_path.exists() else None
+
+        repo_rel = meta.repo if (meta and meta.repo) else self._cfg.repo
+        if repo_rel is None:
+            raise NoRepoSelectedError(
+                "Cannot determine which repository this worktree belongs to. "
+                "Run 'cwm repo switch <path>' to set the tracked repository."
+            )
+
+        base_repo = self._cfg.base_src_path / repo_rel
+        checkout = ws_path / "src" / Path(repo_rel).name
+
+        if checkout.exists():
+            try:
+                git.worktree_remove(checkout, force=force, cwd=base_repo)
+            except GitError:
+                if not force:
+                    raise
+
+        if base_repo.is_dir():
+            try:
+                git.worktree_prune(cwd=base_repo)
+            except GitError:
+                pass
+
+        if ws_path.exists():
+            shutil.rmtree(ws_path)
+
+        meta_path.unlink(missing_ok=True)
+
+        if delete_branch and meta:
+            try:
+                git.branch_delete(meta.branch, force=True, cwd=base_repo)
+            except GitError:
+                pass
 
     def list_worktrees(self) -> list[WorktreeMeta]:
         """Return metadata for all managed worktrees."""
@@ -118,17 +220,14 @@ class WorktreeStateManager:
         """Load metadata for a specific worktree."""
         meta_path = self._cfg.worktree_meta_path(branch)
         if not meta_path.exists():
-            raise WorktreeNotFoundError(
-                f"No metadata for worktree '{branch}'"
-            )
+            raise WorktreeNotFoundError(f"No metadata for worktree '{branch}'")
         return WorktreeMeta.load(meta_path)
 
     def prune_stale(self, branches: list[str] | None = None) -> list[str]:
         """Remove metadata for worktrees whose workspace directory no longer exists.
 
-        If *branches* is provided, only those branches are pruned (skips the scan).
-        Also runs ``git worktree prune`` on the base repository to clean up stale
-        git worktree entries.  Returns the list of pruned branch names.
+        Also runs 'git worktree prune' to clean up stale git worktree entries.
+        Returns the list of pruned branch names.
         """
         if branches is None:
             branches = [
@@ -139,34 +238,10 @@ class WorktreeStateManager:
         for branch in branches:
             self._cfg.worktree_meta_path(branch).unlink(missing_ok=True)
 
-        if self._cfg.base_src_path.exists():
+        if self._cfg.repo_path and self._cfg.repo_path.exists():
             try:
-                git.worktree_prune(cwd=self._cfg.base_src_path)
+                git.worktree_prune(cwd=self._cfg.repo_path)
             except GitError:
                 pass
 
         return branches
-
-    def update_base_sha(self, branch: str) -> tuple[str, str]:
-        """Update the change-detection baseline SHA(s) for *branch* to the current merge-base.
-
-        Returns (old_sha, new_sha).  In meta mode each sub-repo SHA is updated.
-        """
-        meta_path = self._cfg.worktree_meta_path(branch)
-        if not meta_path.exists():
-            raise WorktreeNotFoundError(f"No metadata for worktree '{branch}'")
-        meta = WorktreeMeta.load(meta_path)
-
-        old_sha = next(iter(meta.sub_repo_shas.values()), meta.base_sha)
-        new_shas: dict[str, str] = {}
-        for rel in meta.sub_repos:
-            sub_src = self._cfg.base_src_path / rel
-            try:
-                new_shas[rel] = git.get_head_sha(cwd=sub_src)
-            except GitError:
-                new_shas[rel] = meta.sub_repo_shas.get(rel, "")
-        meta.sub_repo_shas = new_shas
-        new_sha = next(iter(new_shas.values()), old_sha)
-
-        meta.save(meta_path)
-        return old_sha, new_sha

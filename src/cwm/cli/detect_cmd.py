@@ -33,19 +33,13 @@ def detect(cwd: str | None) -> None:
         click.echo(json.dumps({"is_cwm": False}))
         return
 
-    # Discover available sub-repos
-    sub_repos: list[str] = []
-    if config.base_src_path.exists():
-        from cwm.util.repos import discover_sub_repos
-        sub_repos = sorted(discover_sub_repos(config.base_src_path))
-
     active_worktree = os.environ.get("CWM_WORKTREE")
 
     result = {
         "is_cwm": True,
         "project_root": str(root),
         "underlay": config.underlay,
-        "sub_repos": sub_repos,
+        "repo": config.repo,
         **({"active_worktree": active_worktree} if active_worktree else {}),
     }
 

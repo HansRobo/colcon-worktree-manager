@@ -128,6 +128,70 @@ class TestCwmInit:
         assert "Adopted" in result.output
         assert existing_file.exists()
 
+    def test_adopt_single_repo_auto_selects(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Single repo in src/ is automatically selected as the tracked repo."""
+        underlay = tmp_path / "ros"
+        underlay.mkdir()
+
+        project = tmp_path / "ws"
+        project.mkdir()
+        make_git_repo(project / "src" / "my_repo")
+        monkeypatch.chdir(project)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["init", "--underlay", str(underlay)],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0, result.output
+        config = Config.load(project)
+        assert config.repo == "my_repo"
+
+    def test_init_accepts_repo_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--repo flag overrides auto-detection."""
+        underlay = tmp_path / "ros"
+        underlay.mkdir()
+
+        project = tmp_path / "ws"
+        project.mkdir()
+        make_git_repo(project / "src" / "repo_a")
+        make_git_repo(project / "src" / "repo_b")
+        monkeypatch.chdir(project)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["init", "--underlay", str(underlay), "--repo", "repo_a"],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0, result.output
+        config = Config.load(project)
+        assert config.repo == "repo_a"
+
+    def test_fresh_init_leaves_repo_unset(self, tmp_path: Path) -> None:
+        """Fresh init without src/ leaves repo unset."""
+        underlay = tmp_path / "ros"
+        underlay.mkdir()
+
+        project = tmp_path / "fresh_ws"
+        project.mkdir()
+
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=project):
+            result = runner.invoke(
+                cli,
+                ["init", "--underlay", str(underlay)],
+                catch_exceptions=False,
+            )
+            assert result.exit_code == 0, result.output
+            config = Config.load(Path.cwd())
+            assert config.repo is None
+
     def test_fresh_init_does_not_create_src(self, tmp_path: Path) -> None:
         """Fresh init leaves src/ creation to the user."""
         underlay = tmp_path / "ros"
@@ -145,4 +209,4 @@ class TestCwmInit:
             )
             assert result.exit_code == 0, result.output
             assert not (Path.cwd() / "src").exists()
-            assert "Clone your repositories into src/" in result.output
+            assert "Clone your repository into src/" in result.output

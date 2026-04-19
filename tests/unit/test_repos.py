@@ -1,4 +1,4 @@
-"""Unit tests for sub-repository discovery utilities."""
+"""Unit tests for repository discovery utilities."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from cwm.errors import SubRepoNotFoundError
-from cwm.util.repos import discover_sub_repos, validate_sub_repo_paths
+from cwm.errors import RepoNotFoundError
+from cwm.util.repos import discover_sub_repos, validate_repo_path
 from tests.conftest import make_git_repo as _make_git_repo
 
 
@@ -35,13 +35,11 @@ class TestDiscoverSubRepos:
         src = tmp_path / "src"
         outer = src / "outer"
         _make_git_repo(outer)
-        # Create a directory inside the git repo that looks like a nested repo
         inner = outer / "inner"
         inner.mkdir()
         (inner / ".git").mkdir()
 
         result = discover_sub_repos(src)
-        # Only the outer repo should appear
         assert set(result.keys()) == {"outer"}
 
     def test_empty_src(self, tmp_path: Path) -> None:
@@ -65,27 +63,27 @@ class TestDiscoverSubRepos:
         assert set(result.keys()) == {"visible_repo"}
 
 
-class TestValidateSubRepoPaths:
-    def test_valid_paths_pass(self, tmp_path: Path) -> None:
+class TestValidateRepoPath:
+    def test_valid_path_passes(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         _make_git_repo(src / "pkg_a")
-        # Should not raise
-        validate_sub_repo_paths(src, ["pkg_a"])
+        result = validate_repo_path(src, "pkg_a")
+        assert result == src / "pkg_a"
 
     def test_nonexistent_path_raises(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         src.mkdir()
-        with pytest.raises(SubRepoNotFoundError, match="pkg_missing"):
-            validate_sub_repo_paths(src, ["pkg_missing"])
+        with pytest.raises(RepoNotFoundError, match="pkg_missing"):
+            validate_repo_path(src, "pkg_missing")
 
     def test_non_git_directory_raises(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         (src / "not_a_repo").mkdir(parents=True)
-        with pytest.raises(SubRepoNotFoundError, match="not_a_repo"):
-            validate_sub_repo_paths(src, ["not_a_repo"])
+        with pytest.raises(RepoNotFoundError, match="not_a_repo"):
+            validate_repo_path(src, "not_a_repo")
 
     def test_nested_path(self, tmp_path: Path) -> None:
         src = tmp_path / "src"
         _make_git_repo(src / "core" / "autoware_core")
-        # Should not raise
-        validate_sub_repo_paths(src, ["core/autoware_core"])
+        result = validate_repo_path(src, "core/autoware_core")
+        assert result == src / "core" / "autoware_core"

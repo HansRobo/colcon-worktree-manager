@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-
 import click
 
 from cwm.cli.main import ws
@@ -11,7 +10,6 @@ from cwm.core.config import Config
 from cwm.errors import CWMError, GitError
 from cwm.util import git
 from cwm.util.fs import find_project_root
-from cwm.util.repos import discover_sub_repos
 
 
 @ws.command()
@@ -42,18 +40,18 @@ def _collect_base(config: Config) -> dict:
     built = setup_bash.exists()
 
     dirty = False
-    if config.base_src_path.exists():
-        for abs_path in discover_sub_repos(config.base_src_path).values():
-            try:
-                if git.is_dirty(cwd=abs_path):
-                    dirty = True
-                    break
-            except GitError:
-                pass
+    repo_path = config.repo_path
+    if repo_path and repo_path.exists():
+        try:
+            if git.is_dirty(cwd=repo_path):
+                dirty = True
+        except GitError:
+            pass
 
     return {
         "built": built,
         "dirty": dirty,
+        "repo": config.repo,
     }
 
 
@@ -67,42 +65,37 @@ def _collect_worktrees(config: Config, wsm) -> list[dict]:
 
         dirty = False
         ahead = 0
-        if exists:
-            for rel in meta.sub_repos:
-                sub_path = config.worktree_src_path(meta.branch) / rel
-                if not sub_path.is_dir():
-                    continue
-                if not dirty:
+        if exists and meta.repo:
+            sub_path = config.worktree_src_path(meta.branch) / meta.repo_name
+            if sub_path.is_dir():
+                try:
+                    if git.is_dirty(cwd=sub_path):
+                        dirty = True
+                except GitError:
+                    pass
+                if meta.base_branch:
                     try:
-                        if git.is_dirty(cwd=sub_path):
-                            dirty = True
-                    except GitError:
-                        pass
-                base_branch = meta.sub_repo_branches.get(rel)
-                if base_branch:
-                    try:
-                        ahead = max(ahead, git.commits_ahead(base_branch, cwd=sub_path))
+                        ahead = git.commits_ahead(meta.base_branch, cwd=sub_path)
                     except GitError:
                         pass
 
-        entry: dict = {
+        result.append({
             "branch": meta.branch,
+            "repo": meta.repo,
             "exists": exists,
             "built": built,
             "dirty": dirty,
             "ahead": ahead,
             "created_at": meta.created_at,
-        }
-        if meta.sub_repos:
-            entry["sub_repos"] = meta.sub_repos
-        result.append(entry)
+        })
     return result
 
 
 def _print_human(base: dict, worktrees: list[dict]) -> None:
     built_mark = click.style("built", fg="green") if base["built"] else click.style("not built", fg="yellow")
     dirty_mark = click.style(" dirty", fg="red") if base["dirty"] else ""
-    click.echo(f"Base workspace  {built_mark}{dirty_mark}")
+    repo_str = f"  [{base['repo']}]" if base.get("repo") else ""
+    click.echo(f"Base workspace  {built_mark}{dirty_mark}{repo_str}")
 
     if not worktrees:
         click.echo()
@@ -121,8 +114,6 @@ def _print_human(base: dict, worktrees: list[dict]) -> None:
 
         dirty_str = click.style(" dirty", fg="red") if wt["dirty"] else ""
         ahead_str = f"  +{wt['ahead']} commit(s)" if wt["ahead"] else ""
+        repo_str = f"  [{wt['repo']}]" if wt.get("repo") else ""
 
-        click.echo(f"  {wt['branch']}  {status_str}{dirty_str}{ahead_str}")
-        if wt.get("sub_repos"):
-            for sr in wt["sub_repos"]:
-                click.echo(f"    - {sr}")
+        click.echo(f"  {wt['branch']}  {status_str}{dirty_str}{ahead_str}{repo_str}")
