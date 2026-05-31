@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,7 +31,12 @@ def _run(
     cwd: Path | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a git command and return the CompletedProcess result."""
+    """Run a git command and return the CompletedProcess result.
+
+    Sets CWM_GIT_HOOK_DEPTH=1 so the PATH wrapper at .cwm/bin/git transparently
+    delegates to real git instead of re-entering 'cwm worktree __git_hook'.
+    """
+    env = {**os.environ, "CWM_GIT_HOOK_DEPTH": "1"}
     try:
         return subprocess.run(
             ["git", *args],
@@ -38,6 +44,7 @@ def _run(
             capture_output=True,
             text=True,
             check=check,
+            env=env,
         )
     except subprocess.CalledProcessError as exc:
         hint = _friendly_hint(exc.stderr)

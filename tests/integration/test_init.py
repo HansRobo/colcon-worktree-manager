@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -36,6 +37,28 @@ class TestCwmInit:
             assert (cwd / "worktrees").is_dir()
             assert (cwd / "worktrees" / COLCON_IGNORE).is_file()
             assert not (cwd / "base_ws").exists()
+
+    def test_creates_git_wrapper(self, tmp_path: Path) -> None:
+        """cwm init must drop an executable .cwm/bin/git wrapper."""
+        underlay = tmp_path / "ros"
+        underlay.mkdir()
+
+        project = tmp_path / "project"
+        project.mkdir()
+
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=project):
+            result = runner.invoke(
+                cli,
+                ["init", "--underlay", str(underlay)],
+                catch_exceptions=False,
+            )
+            assert result.exit_code == 0, result.output
+
+            wrapper = Path.cwd() / ".cwm" / "bin" / "git"
+            assert wrapper.is_file()
+            assert os.access(wrapper, os.X_OK)
+            assert "cwm worktree __git_hook" in wrapper.read_text()
 
     def test_config_persisted(self, tmp_path: Path) -> None:
         underlay = tmp_path / "ros"
