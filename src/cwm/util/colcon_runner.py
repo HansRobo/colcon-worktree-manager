@@ -50,13 +50,14 @@ def run_colcon_build(
     return run_colcon("build", workspace, extra_args, env=env)
 
 
-def run_colcon_build_sourced(
+def run_colcon_sourced(
+    subcommand: str,
     workspace: Path,
     underlay_install: Path,
     overlay_install: Path | None,
     extra_args: list[str] | None = None,
 ) -> int:
-    """Execute ``colcon build`` in *workspace* after sourcing the ROS 2 environment.
+    """Execute a colcon subcommand in *workspace* after sourcing the ROS 2 environment.
 
     Sources *underlay_install*/setup.bash (and *overlay_install*/local_setup.bash
     if it exists) inside a bash subshell so the calling process environment is
@@ -69,7 +70,7 @@ def run_colcon_build_sourced(
     if local_setup and local_setup.exists():
         source_cmds.append(f"source {shlex.quote(str(local_setup))}")
 
-    colcon_cmd = ["colcon", "build"]
+    colcon_cmd = ["colcon", subcommand]
     if extra_args:
         colcon_cmd.extend(extra_args)
 
@@ -84,8 +85,18 @@ def run_colcon_build_sourced(
         stderr=sys.stderr,
     )
     if result.returncode != 0:
-        raise ColconError(f"colcon build failed with exit code {result.returncode}")
+        raise ColconError(f"colcon {subcommand} failed with exit code {result.returncode}")
     return result.returncode
+
+
+def run_colcon_build_sourced(
+    workspace: Path,
+    underlay_install: Path,
+    overlay_install: Path | None,
+    extra_args: list[str] | None = None,
+) -> int:
+    """Backward-compatible wrapper around :func:`run_colcon_sourced` for ``colcon build``."""
+    return run_colcon_sourced("build", workspace, underlay_install, overlay_install, extra_args)
 
 
 def run_colcon_test(
