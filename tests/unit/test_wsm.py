@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -142,3 +145,202 @@ class TestRemoveWorktree:
         wsm.remove_worktree("feature-fix", delete_branch=True)
 
         assert not gitutil.branch_exists("feature-fix", cwd=project.base_src_path / "my_repo")
+
+
+class TestAgentSymlinks:
+    def test_metadata_round_trips_agent_symlinks(self, project: Config, tmp_path: Path) -> None:
+        wsm = WorktreeStateManager(project)
+        wsm.create_worktree("feature-fix")
+        link = tmp_path / "feature-fix"
+
+        wsm.register_agent_symlink("feature-fix", link)
+
+        reloaded = WorktreeMeta.load(project.worktree_meta_path("feature-fix"))
+        assert str(link.absolute()) in reloaded.agent_symlinks
+        assert link.is_symlink()
+        assert link.resolve() == project.worktree_ws_path("feature-fix").resolve()
+
+    def test_register_is_idempotent(self, project: Config, tmp_path: Path) -> None:
+        wsm = WorktreeStateManager(project)
+        wsm.create_worktree("feature-fix")
+        link = tmp_path / "feature-fix"
+
+        wsm.register_agent_symlink("feature-fix", link)
+        wsm.register_agent_symlink("feature-fix", link)
+
+        meta = WorktreeMeta.load(project.worktree_meta_path("feature-fix"))
+        assert meta.agent_symlinks.count(str(link.absolute())) == 1
+
+    def test_remove_worktree_unlinks_symlink(self, project: Config, tmp_path: Path) -> None:
+        wsm = WorktreeStateManager(project)
+        wsm.create_worktree("feature-fix")
+        link = tmp_path / "feature-fix"
+        wsm.register_agent_symlink("feature-fix", link)
+
+        wsm.remove_worktree("feature-fix")
+
+        assert not link.is_symlink()
+        assert not link.exists()
+
+    def test_remove_worktree_tolerates_already_deleted_symlink(self, project: Config, tmp_path: Path) -> None:
+        wsm = WorktreeStateManager(project)
+        wsm.create_worktree("feature-fix")
+        link = tmp_path / "feature-fix"
+        wsm.register_agent_symlink("feature-fix", link)
+        link.unlink()  # user removed the symlink manually
+
+        # Must not raise
+        wsm.remove_worktree("feature-fix")
+
+
+class TestInitProjectGitWrapper:
+    def test_writes_executable_git_wrapper(self, tmp_path: Path) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        WorktreeStateManager.init_project(root, underlay="/opt/ros/jazzy")
+
+        wrapper = root / ".cwm" / "bin" / "git"
+        assert wrapper.is_file()
+        assert os.access(wrapper, os.X_OK)
+        content = wrapper.read_text()
+        assert "cwm worktree __git_hook" in content
+        assert content.startswith("#!/usr/bin/env bash")
+
+    def test_wrapper_has_recursion_sentinel_check(self, tmp_path: Path) -> None:
+        """Recursion guard prevents the wrapper from re-entering itself when
+        CWM's own subprocess calls go through PATH (issue: PATH wrapper
+        recursion during activated shell)."""
+        root = tmp_path / "project"
+        root.mkdir()
+        WorktreeStateManager.init_project(root, underlay="/opt/ros/jazzy")
+        wrapper = root / ".cwm" / "bin" / "git"
+        content = wrapper.read_text()
+        assert "CWM_GIT_HOOK_DEPTH" in content
+
+    def test_wrapper_has_project_root_scope_guard(self, tmp_path: Path) -> None:
+        """Wrapper degrades to real git when CWM_PROJECT_ROOT is not set
+        (= outside activated context), so a stray .cwm/bin entry in PATH does
+        not hijack unrelated repositories."""
+        root = tmp_path / "project"
+        root.mkdir()
+        WorktreeStateManager.init_project(root, underlay="/opt/ros/jazzy")
+        wrapper = root / ".cwm" / "bin" / "git"
+        content = wrapper.read_text()
+        assert "CWM_PROJECT_ROOT" in content
+
+
+class TestGitWrapperBehaviour:
+    """Execute the generated .cwm/bin/git wrapper under bash to verify its
+    runtime pass-through guards (the static tests above only assert content).
+
+    This covers the subprocess-capture path that the shell function cannot: the
+    wrapper must forward 'git worktree ...' to the CWM hook only inside an
+    activated project, and otherwise delegate transparently to the real git.
+    """
+
+    @staticmethod
+    def _prepare(tmp_path: Path) -> tuple[Path, str, Path]:
+        from cwm.core.wsm import _write_git_wrapper
+
+        log = tmp_path / "calls.log"
+        realbin = tmp_path / "realbin"
+        realbin.mkdir()
+        real_git = realbin / "git"
+        real_git.write_text(f'#!/usr/bin/env bash\nprintf "REAL_GIT %s\\n" "$*" >> "{log}"\n')
+        real_git.chmod(0o755)
+
+        cwmbin = tmp_path / "cwmbin"
+        cwmbin.mkdir()
+        cwm_stub = cwmbin / "cwm"
+        cwm_stub.write_text(f'#!/usr/bin/env bash\nprintf "CWM %s\\n" "$*" >> "{log}"\n')
+        cwm_stub.chmod(0o755)
+
+        wrapper = tmp_path / "shim" / "git"
+        _write_git_wrapper(wrapper)
+
+        # Fake bins take precedence; the real PATH tail supplies bash/dirname/etc.
+        path = os.pathsep.join(
+            [str(wrapper.parent), str(realbin), str(cwmbin), os.environ.get("PATH", "")]
+        )
+        return wrapper, path, log
+
+    @staticmethod
+    def _invoke(wrapper: Path, path: str, args: list[str], **env_overrides: str) -> None:
+        env = os.environ.copy()
+        env["PATH"] = path
+        env.pop("CWM_PROJECT_ROOT", None)
+        env.pop("CWM_GIT_HOOK_DEPTH", None)
+        env.update(env_overrides)
+        bash = shutil.which("bash") or "/bin/bash"
+        subprocess.run([bash, str(wrapper), *args], env=env, check=False)
+
+    def test_delegates_to_real_git_when_depth_sentinel_set(self, tmp_path: Path) -> None:
+        wrapper, path, log = self._prepare(tmp_path)
+        self._invoke(
+            wrapper,
+            path,
+            ["worktree", "list"],
+            CWM_PROJECT_ROOT=str(tmp_path),
+            CWM_GIT_HOOK_DEPTH="1",
+        )
+        assert log.read_text() == "REAL_GIT worktree list\n"
+
+    def test_delegates_to_real_git_when_project_root_unset(self, tmp_path: Path) -> None:
+        wrapper, path, log = self._prepare(tmp_path)
+        self._invoke(wrapper, path, ["worktree", "list"])  # no CWM_PROJECT_ROOT
+        assert log.read_text() == "REAL_GIT worktree list\n"
+
+    def test_delegates_to_real_git_for_non_worktree_subcommand(self, tmp_path: Path) -> None:
+        wrapper, path, log = self._prepare(tmp_path)
+        self._invoke(wrapper, path, ["status"], CWM_PROJECT_ROOT=str(tmp_path))
+        assert log.read_text() == "REAL_GIT status\n"
+
+    def test_forwards_worktree_to_cwm_hook_when_activated(self, tmp_path: Path) -> None:
+        wrapper, path, log = self._prepare(tmp_path)
+        self._invoke(
+            wrapper,
+            path,
+            ["worktree", "add", "-b", "x", "../x"],
+            CWM_PROJECT_ROOT=str(tmp_path),
+        )
+        assert log.read_text() == "CWM worktree __git_hook add -b x ../x\n"
+
+
+class TestRegisterAgentSymlinkRejection:
+    def test_refuses_existing_regular_directory(self, project: Config, tmp_path: Path) -> None:
+        wsm = WorktreeStateManager(project)
+        wsm.create_worktree("feature-fix")
+        existing = tmp_path / "feature-fix"
+        existing.mkdir()
+
+        from cwm.errors import CWMError
+        with pytest.raises(CWMError):
+            wsm.register_agent_symlink("feature-fix", existing)
+
+    def test_refuses_existing_regular_file(self, project: Config, tmp_path: Path) -> None:
+        wsm = WorktreeStateManager(project)
+        wsm.create_worktree("feature-fix")
+        existing = tmp_path / "feature-fix"
+        existing.write_text("conflict")
+
+        from cwm.errors import CWMError
+        with pytest.raises(CWMError):
+            wsm.register_agent_symlink("feature-fix", existing)
+
+    def test_normalises_double_dot_in_stored_path(
+        self, project: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """register_agent_symlink must collapse '..' so later lookups from a
+        different cwd resolve to the same string."""
+        wsm = WorktreeStateManager(project)
+        wsm.create_worktree("feature-fix")
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        monkeypatch.chdir(sub)
+        # ../sibling resolves to tmp_path/sibling after collapsing '..'.
+        registered = wsm.register_agent_symlink("feature-fix", Path("../sibling"))
+
+        assert ".." not in str(registered)
+        # The stored link path itself (not its target) should be the
+        # collapsed absolute path of ../sibling.
+        assert str(registered) == os.path.abspath(str(sub / ".." / "sibling"))

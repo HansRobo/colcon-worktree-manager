@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shlex
 import sys
 from pathlib import Path
@@ -127,6 +128,10 @@ fi
 if [ -f {q_overlay_install}/local_setup.bash ]; then
     source {q_overlay_install}/local_setup.bash
 fi
+
+# Prepend the CWM bin shim to PATH so that subprocess-level 'git' calls (which
+# bypass the shell function from 'cwm shell-init') are still intercepted.
+export PATH={q_root}/.cwm/bin:${{PATH}}
 
 # Export CWM workspace markers.
 export CWM_ACTIVE=1
@@ -273,6 +278,14 @@ def activate(branch: str | None) -> None:
     try:
         root = find_project_root()
         config = Config.load(root)
+
+        # Lazily (re)generate the .cwm/bin/git wrapper.  Projects initialised
+        # before this feature existed, or where the wrapper was tampered with,
+        # need the file to be present before PATH manipulation is meaningful.
+        from cwm.core.wsm import _write_git_wrapper
+        wrapper_path = config.cwm_dir / "bin" / "git"
+        if not wrapper_path.is_file() or not os.access(wrapper_path, os.X_OK):
+            _write_git_wrapper(wrapper_path)
 
         is_new = False
         if branch is None:

@@ -51,6 +51,35 @@ cwm() {
             ;;
     esac
 }
+
+# Walk up from $PWD looking for .cwm/.  No reliance on CWM_ACTIVE so that an
+# activated shell which has cd'd into an unrelated repo does not hijack git.
+# Guards against fixed-point dirname (e.g. dirname '.' -> '.') by breaking when
+# the parent stops changing.
+__cwm_in_project() {
+    local dir prev
+    dir="$PWD"
+    while [[ -n "$dir" ]]; do
+        [[ -d "$dir/.cwm" ]] && return 0
+        [[ "$dir" == "/" ]] && return 1
+        prev="$dir"
+        dir="$(dirname "$dir")"
+        [[ "$dir" == "$prev" ]] && return 1
+    done
+    return 1
+}
+
+# Intercept 'git worktree' inside CWM projects and forward to the CWM hook.
+# All other git invocations (and 'git worktree' outside a CWM project) fall
+# through to the real binary via 'command git'.
+git() {
+    if [[ "$1" == "worktree" ]] && __cwm_in_project; then
+        shift
+        command cwm worktree __git_hook "$@"
+        return $?
+    fi
+    command git "$@"
+}
 """
 
 

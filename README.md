@@ -121,6 +121,38 @@ Several commands accept `--json` for machine-readable output: `cwm ws status`, `
 |---------|-------------|
 | `cwm base update` | Pull the tracked repository and rebuild the base workspace |
 
+### AI agent integration
+
+CWM intercepts `git worktree` invocations inside a CWM project so that AI
+coding agents (or any tool that defaults to raw `git` knowledge) can drive the
+overlay workflow without breaking the `<branch>_ws/src/<repo>` layout. The
+interception is two-tiered:
+
+1. **Shell function** — `eval "$(cwm shell-init)"` installs a `git()` function
+   that intercepts `git worktree …` whenever the current directory (or an
+   ancestor) contains `.cwm/`. Activation is *not* required.
+2. **PATH shim** — `cwm activate <branch>` prepends `<project>/.cwm/bin` to
+   `PATH`. The `git` script there forwards `worktree` subcommands to CWM and
+   delegates everything else to the real `git`. This catches `git` calls made
+   from subprocesses (Python `subprocess`, `bash -c …`) that bypass the shell
+   function.
+
+For an agent, `git worktree add -b feature-x ../feature-x` then transparently
+creates `worktrees/feature-x_ws/`, drops a symlink at `../feature-x`, and
+prints the next step (`source <(cwm activate feature-x)`) to stderr. Both the
+symlink and the real workspace are valid working paths.
+
+| Subcommand | Behaviour |
+|---|---|
+| `git worktree add [-b] <path> [<branch>]` | Creates the CWM workspace and a symlink at `<path>`. Recognised flags (`-f`, `--detach`, `--lock`, `--orphan`, …) are accepted but the CWM layout is always produced. |
+| `git worktree list [--porcelain]` | Lists CWM-managed worktrees in `git worktree list` format. |
+| `git worktree remove <path>` | Resolves `<path>` (symlink or real workspace) back to a branch and runs `cwm worktree remove`. |
+| `git worktree prune` | Forwards to `cwm worktree prune`. |
+| `lock` / `unlock` / `move` / `repair` | Refused with a pointer to `cwm worktree --help`. |
+
+The symlink path is recorded in the worktree metadata and removed automatically
+by `cwm worktree remove`.
+
 ### colcon passthrough
 
 After activation, `cwm` acts as a drop-in replacement for `colcon`. Any flags
