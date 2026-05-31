@@ -10,8 +10,8 @@ import click
 from cwm.cli.completion import complete_worktree_branches
 from cwm.cli.main import ws
 from cwm.core.cdc import ColconDiscoveryController
+from cwm.core.changeset import compute_changeset
 from cwm.core.config import Config
-from cwm.core.dga import DependencyGraphAnalyzer
 from cwm.errors import CWMError, NotActivatedError
 from cwm.util.colcon_runner import run_colcon_build, run_colcon_build_sourced
 from cwm.util.fs import find_project_root
@@ -74,41 +74,23 @@ def build(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_arg
         src_path = config.worktree_src_path(branch)
 
         click.echo("Scanning packages...")
-        dga = DependencyGraphAnalyzer()
-        dga.scan(src_path)
-        click.echo(f"  Found {len(dga.packages)} packages")
+        cs = compute_changeset(config, branch, no_rdeps=no_rdeps)
+        click.echo(f"  Found {cs.package_count} packages")
 
         click.echo("Detecting changes...")
-        cdc = ColconDiscoveryController(src_path)
-
-        from cwm.core.wsm import WorktreeMeta
-        from pathlib import Path as _Path
-        meta = WorktreeMeta.load(config.worktree_meta_path(branch))
-        repo_name = _Path(meta.repo).name if meta.repo else ""
-        changed_files = cdc.get_changed_files_meta([repo_name], {repo_name: meta.base_sha})
-        changed = cdc.get_changed_packages(dga, changed_files)
-
-        if not changed:
+        if not cs.changed:
             click.echo("No changed packages detected. Nothing to build.")
             return
 
-        click.echo(f"  Changed: {', '.join(sorted(changed))}")
+        click.echo(f"  Changed: {', '.join(sorted(cs.changed))}")
+        if cs.affected:
+            click.echo(f"  Affected (reverse deps): {', '.join(sorted(cs.affected))}")
+        click.echo(f"  Build order: {' -> '.join(cs.build_order)}")
 
-        # Compute reverse dependencies to prevent ABI/ODR violations
-        if no_rdeps:
-            affected: set[str] = set()
-        else:
-            affected = dga.get_reverse_deps(changed)
-            if affected:
-                click.echo(f"  Affected (reverse deps): {', '.join(sorted(affected))}")
-
-        all_build = changed | affected
-        build_order = dga.topological_sort(all_build)
-        click.echo(f"  Build order: {' -> '.join(build_order)}")
-
+        cdc = ColconDiscoveryController(src_path)
         colcon_extra = cdc.generate_build_args(
-            changed,
-            affected,
+            cs.changed,
+            cs.affected,
             symlink_install=config.symlink_install,
         )
         colcon_extra.extend(colcon_args)
