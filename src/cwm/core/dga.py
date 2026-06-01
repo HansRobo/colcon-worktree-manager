@@ -39,9 +39,13 @@ class DependencyGraphAnalyzer:
         """Walk *src_path* to discover packages and build the dependency graph.
 
         Each directory containing a ``package.xml`` is treated as a ROS
-        package. Dependencies are extracted from ``build_depends``,
-        ``exec_depends``, and ``build_export_depends`` fields (the
-        ``<depend>`` tag is automatically expanded by catkin_pkg).
+        package. Edges are built from ``build_depends`` and
+        ``build_export_depends`` only -- the ABI-relevant dependencies that
+        require a consumer rebuild when a dependency changes. ``exec_depends``
+        are runtime-only and intentionally excluded: a runtime dependency
+        changing does not affect a consumer's ABI. (The ``<depend>`` tag is
+        expanded by catkin_pkg into all three lists, so packages declared with
+        ``<depend>`` stay tracked via ``build_depends``.)
         """
         self._pkg_paths.clear()
         self._forward.clear()
@@ -60,8 +64,7 @@ class DependencyGraphAnalyzer:
             self._forward[pkg.name] = set()
             self._reverse.setdefault(pkg.name, set())
             raw_deps = [
-                d.name
-                for d in pkg.build_depends + pkg.exec_depends + pkg.build_export_depends
+                d.name for d in pkg.build_depends + pkg.build_export_depends
             ]
             parsed.append((pkg.name, raw_deps))
 
@@ -92,6 +95,8 @@ class DependencyGraphAnalyzer:
 
         This is the "affected set" - all packages that need to be rebuilt
         when any package in *packages* changes, to maintain ABI safety.
+        Only build/build_export dependents are tracked (see :meth:`scan`), so
+        runtime-only (``exec_depends``) consumers are NOT included here.
         Does NOT include *packages* themselves.
         """
         visited: set[str] = set()

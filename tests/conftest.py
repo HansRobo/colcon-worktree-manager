@@ -82,3 +82,52 @@ def sample_ws(tmp_path: Path) -> Path:
         )
 
     return tmp_path
+
+
+@pytest.fixture
+def mixed_deps_ws(tmp_path: Path) -> Path:
+    """Workspace exercising each dependency category for ABI-edge tests.
+
+    Only build/build_export dependencies are ABI-relevant; exec-only edges
+    are dropped from the graph:
+        lib_abi      <--  abi_consumer     (build_depend)
+        lib_abi      <--  shared_consumer  (depend = build + exec + export)
+        lib_abi      <--  export_consumer  (build_export_depend)
+        lib_runtime  <--  exec_consumer    (exec_depend -- ABI-irrelevant)
+    """
+    # name -> {package.xml dependency tag -> [dependency names]}
+    pkgs: dict[str, dict[str, list[str]]] = {
+        "lib_abi": {},
+        "lib_runtime": {},
+        "abi_consumer": {"build_depend": ["lib_abi"]},
+        "exec_consumer": {"exec_depend": ["lib_runtime"]},
+        "shared_consumer": {"depend": ["lib_abi"]},
+        "export_consumer": {"build_export_depend": ["lib_abi"]},
+    }
+
+    src = tmp_path / "src"
+    for name, deps_by_tag in pkgs.items():
+        pkg_dir = src / name
+        pkg_dir.mkdir(parents=True)
+        dep_xml = "\n".join(
+            f"  <{tag}>{dep}</{tag}>"
+            for tag, deps in deps_by_tag.items()
+            for dep in deps
+        )
+        (pkg_dir / "package.xml").write_text(
+            f"""<?xml version="1.0"?>
+<package format="3">
+  <name>{name}</name>
+  <version>0.0.0</version>
+  <description>Test package</description>
+  <maintainer email="test@test.com">test</maintainer>
+  <license>Apache-2.0</license>
+{dep_xml}
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+"""
+        )
+
+    return tmp_path

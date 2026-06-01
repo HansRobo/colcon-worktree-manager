@@ -5,7 +5,7 @@ A CLI tool that integrates `git worktree` with `colcon` for parallel ROS 2 devel
 ## Features
 
 - **Smart diff-based builds** - Automatically detects changed packages via `git diff` and builds only what's needed
-- **ABI-safe reverse dependency resolution** - Computes and rebuilds affected packages to prevent ODR violations and runtime crashes
+- **ABI-safe reverse dependency resolution** - Rebuilds affected packages via `build`/`build_export` dependencies to prevent ODR violations and runtime crashes; runtime-only (`exec`) dependents are skipped
 - **Environment isolation** - Activates per-worktree environment (ROS overlays, `AMENT_PREFIX_PATH`) via `cwm activate` / `cwm deactivate`
 - **Optimised colcon arguments** - Generates `--packages-select` and `--allow-overriding` flags automatically
 
@@ -93,7 +93,7 @@ cwm deactivate
 
 | Command | Description |
 |---------|-------------|
-| `cwm ws build [--dry-run] [--no-rdeps]` | Build changed packages + reverse deps in the active worktree |
+| `cwm ws build [--dry-run] [--no-rdeps]` | Build changed packages + their ABI reverse deps (`build`/`build_export`; `exec`-only excluded) in the active worktree |
 | `cwm ws clean [--all]` | Clean build artifacts |
 | `cwm ws status [--json]` | Show the state of the base workspace and all worktrees |
 
@@ -185,7 +185,7 @@ cwm graph
 CWM consists of three core modules:
 
 1. **Colcon Discovery Controller (CDC)** - Detects changed packages via git diff and controls colcon's package discovery
-2. **Dependency Graph Analyzer (DGA)** - Parses `package.xml` files to build a DAG and computes reverse dependencies
+2. **Dependency Graph Analyzer (DGA)** - Parses `package.xml` files to build a DAG and computes ABI reverse dependencies (`build_depends`/`build_export_depends`; `exec_depends` are runtime-only and excluded)
 3. **Worktree State Manager (WSM)** - Manages git worktree lifecycle and environment isolation
 
 ### Directory Structure
