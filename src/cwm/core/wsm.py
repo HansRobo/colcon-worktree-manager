@@ -21,6 +21,7 @@ from cwm.errors import (
 )
 from cwm.util import git
 from cwm.util.fs import ensure_dir
+from cwm.util.lock import cwm_lock
 
 # Wrapper script installed at .cwm/bin/git so that subprocess-level 'git'
 # invocations (which bypass the shell function from 'cwm shell-init') are still
@@ -194,47 +195,48 @@ class WorktreeStateManager:
                 "No repository selected. Run 'cwm repo switch <path>' first."
             )
 
-        safe_name = self._cfg.safe_branch_name(branch)
-        for existing in self.list_worktrees():
-            if existing.branch != branch and self._cfg.safe_branch_name(existing.branch) == safe_name:
-                raise BranchNameCollisionError(
-                    f"Branch '{branch}' conflicts with existing worktree '{existing.branch}' "
-                    f"(both map to '{safe_name}_ws'). Use a different branch name."
-                )
-
         repo_rel = self._cfg.repo
         base_repo = self._cfg.base_src_path / repo_rel
         repo_name = self._cfg.repo_name
         ws_path = self._cfg.worktree_ws_path(branch)
 
-        if ws_path.exists():
-            raise WorktreeExistsError(f"Worktree workspace already exists: {ws_path}")
+        with cwm_lock(self._cfg.cwm_dir):
+            safe_name = self._cfg.safe_branch_name(branch)
+            for existing in self.list_worktrees():
+                if existing.branch != branch and self._cfg.safe_branch_name(existing.branch) == safe_name:
+                    raise BranchNameCollisionError(
+                        f"Branch '{branch}' conflicts with existing worktree '{existing.branch}' "
+                        f"(both map to '{safe_name}_ws'). Use a different branch name."
+                    )
 
-        self._cfg.ensure_worktrees_ignore_marker()
-        ensure_dir(ws_path / "build")
-        ensure_dir(ws_path / "install")
-        ensure_dir(ws_path / "log")
-        checkout = ws_path / "src" / repo_name
-        ensure_dir(checkout.parent)
+            if ws_path.exists():
+                raise WorktreeExistsError(f"Worktree workspace already exists: {ws_path}")
 
-        git.worktree_add(checkout, branch, create_branch=True, cwd=base_repo)
+            self._cfg.ensure_worktrees_ignore_marker()
+            ensure_dir(ws_path / "build")
+            ensure_dir(ws_path / "install")
+            ensure_dir(ws_path / "log")
+            checkout = ws_path / "src" / repo_name
+            ensure_dir(checkout.parent)
 
-        try:
-            base_sha = git.get_head_sha(cwd=base_repo)
-        except GitError:
-            base_sha = ""
-        try:
-            base_branch = git.get_current_branch(cwd=base_repo)
-        except GitError:
-            base_branch = ""
+            git.worktree_add(checkout, branch, create_branch=True, cwd=base_repo)
 
-        WorktreeMeta(
-            branch=branch,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            repo=repo_rel,
-            base_sha=base_sha,
-            base_branch=base_branch,
-        ).save(self._cfg.worktree_meta_path(branch))
+            try:
+                base_sha = git.get_head_sha(cwd=base_repo)
+            except GitError:
+                base_sha = ""
+            try:
+                base_branch = git.get_current_branch(cwd=base_repo)
+            except GitError:
+                base_branch = ""
+
+            WorktreeMeta(
+                branch=branch,
+                created_at=datetime.now(timezone.utc).isoformat(),
+                repo=repo_rel,
+                base_sha=base_sha,
+                base_branch=base_branch,
+            ).save(self._cfg.worktree_meta_path(branch))
 
         return ws_path
 
@@ -253,50 +255,52 @@ class WorktreeStateManager:
         """
         meta_path = self._cfg.worktree_meta_path(branch)
         ws_path = self._cfg.worktree_ws_path(branch)
-        meta = WorktreeMeta.load(meta_path) if meta_path.exists() else None
 
-        repo_rel = meta.repo if (meta and meta.repo) else self._cfg.repo
-        if repo_rel is None:
-            raise NoRepoSelectedError(
-                "Cannot determine which repository this worktree belongs to. "
-                "Run 'cwm repo switch <path>' to set the tracked repository."
-            )
+        with cwm_lock(self._cfg.cwm_dir):
+            meta = WorktreeMeta.load(meta_path) if meta_path.exists() else None
 
-        base_repo = self._cfg.base_src_path / repo_rel
-        checkout = ws_path / "src" / Path(repo_rel).name
+            repo_rel = meta.repo if (meta and meta.repo) else self._cfg.repo
+            if repo_rel is None:
+                raise NoRepoSelectedError(
+                    "Cannot determine which repository this worktree belongs to. "
+                    "Run 'cwm repo switch <path>' to set the tracked repository."
+                )
 
-        if checkout.exists():
-            try:
-                git.worktree_remove(checkout, force=force, cwd=base_repo)
-            except GitError:
-                if not force:
-                    raise
+            base_repo = self._cfg.base_src_path / repo_rel
+            checkout = ws_path / "src" / Path(repo_rel).name
 
-        if base_repo.is_dir():
-            try:
-                git.worktree_prune(cwd=base_repo)
-            except GitError:
-                pass
+            if checkout.exists():
+                try:
+                    git.worktree_remove(checkout, force=force, cwd=base_repo)
+                except GitError:
+                    if not force:
+                        raise
 
-        if ws_path.exists():
-            shutil.rmtree(ws_path)
+            if base_repo.is_dir():
+                try:
+                    git.worktree_prune(cwd=base_repo)
+                except GitError:
+                    pass
 
-        if meta:
-            for link in meta.agent_symlinks:
-                link_p = Path(link)
-                if link_p.is_symlink():
-                    try:
-                        link_p.unlink()
-                    except OSError:
-                        pass  # best-effort
+            if ws_path.exists():
+                shutil.rmtree(ws_path)
 
-        meta_path.unlink(missing_ok=True)
+            if meta:
+                for link in meta.agent_symlinks:
+                    link_p = Path(link)
+                    if link_p.is_symlink():
+                        try:
+                            link_p.unlink()
+                        except OSError:
+                            pass  # best-effort
 
-        if delete_branch and meta:
-            try:
-                git.branch_delete(meta.branch, force=True, cwd=base_repo)
-            except GitError:
-                pass
+            meta_path.unlink(missing_ok=True)
+
+            if delete_branch and meta:
+                try:
+                    git.branch_delete(meta.branch, force=True, cwd=base_repo)
+                except GitError:
+                    pass
 
     def list_worktrees(self) -> list[WorktreeMeta]:
         """Return metadata for all managed worktrees."""
@@ -348,10 +352,11 @@ class WorktreeStateManager:
         else:
             abs_link.parent.mkdir(parents=True, exist_ok=True)
             os.symlink(ws_path, abs_link)
-        meta = self.get_worktree_meta(branch)
-        if str(abs_link) not in meta.agent_symlinks:
-            meta.agent_symlinks.append(str(abs_link))
-            meta.save(self._cfg.worktree_meta_path(branch))
+        with cwm_lock(self._cfg.cwm_dir):
+            meta = self.get_worktree_meta(branch)
+            if str(abs_link) not in meta.agent_symlinks:
+                meta.agent_symlinks.append(str(abs_link))
+                meta.save(self._cfg.worktree_meta_path(branch))
         return abs_link
 
     def prune_stale(self, branches: list[str] | None = None) -> list[str]:
@@ -360,19 +365,20 @@ class WorktreeStateManager:
         Also runs 'git worktree prune' to clean up stale git worktree entries.
         Returns the list of pruned branch names.
         """
-        if branches is None:
-            branches = [
-                meta.branch for meta in self.list_worktrees()
-                if not self._cfg.worktree_ws_path(meta.branch).exists()
-            ]
+        with cwm_lock(self._cfg.cwm_dir):
+            if branches is None:
+                branches = [
+                    meta.branch for meta in self.list_worktrees()
+                    if not self._cfg.worktree_ws_path(meta.branch).exists()
+                ]
 
-        for branch in branches:
-            self._cfg.worktree_meta_path(branch).unlink(missing_ok=True)
+            for branch in branches:
+                self._cfg.worktree_meta_path(branch).unlink(missing_ok=True)
 
-        if self._cfg.repo_path and self._cfg.repo_path.exists():
-            try:
-                git.worktree_prune(cwd=self._cfg.repo_path)
-            except GitError:
-                pass
+            if self._cfg.repo_path and self._cfg.repo_path.exists():
+                try:
+                    git.worktree_prune(cwd=self._cfg.repo_path)
+                except GitError:
+                    pass
 
         return branches

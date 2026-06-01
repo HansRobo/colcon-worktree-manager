@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
 import shutil
 import subprocess
@@ -191,6 +192,54 @@ class TestAgentSymlinks:
 
         # Must not raise
         wsm.remove_worktree("feature-fix")
+
+
+class TestLifecycleLocking:
+    """Lifecycle methods must hold the .cwm/lock flock across their git +
+    metadata critical section, so concurrent agents are serialized."""
+
+    @staticmethod
+    def _assert_lock_held(cwm_dir: Path) -> None:
+        """Fail if an independent fd can grab .cwm/lock right now."""
+        fd = os.open(cwm_dir / "lock", os.O_RDWR)
+        try:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            os.close(fd)
+
+    def test_create_worktree_holds_lock(self, project: Config) -> None:
+        wsm = WorktreeStateManager(project)
+
+        def side_effect(*args: object, **kwargs: object) -> None:
+            self._assert_lock_held(project.cwm_dir)
+
+        with patch("cwm.util.git.worktree_add", side_effect=side_effect):
+            wsm.create_worktree("feature-fix")
+
+    def test_remove_worktree_holds_lock(self, project: Config) -> None:
+        wsm = WorktreeStateManager(project)
+        wsm.create_worktree("feature-fix")
+
+        def side_effect(*args: object, **kwargs: object) -> None:
+            self._assert_lock_held(project.cwm_dir)
+
+        with patch("cwm.util.git.worktree_remove", side_effect=side_effect):
+            wsm.remove_worktree("feature-fix")
+
+    def test_prune_stale_holds_lock(self, project: Config) -> None:
+        wsm = WorktreeStateManager(project)
+
+        def side_effect(*args: object, **kwargs: object) -> None:
+            self._assert_lock_held(project.cwm_dir)
+
+        with patch("cwm.util.git.worktree_prune", side_effect=side_effect):
+            wsm.prune_stale()
+
+    def test_create_worktree_creates_lock_file(self, project: Config) -> None:
+        wsm = WorktreeStateManager(project)
+        wsm.create_worktree("feature-fix")
+        assert (project.cwm_dir / "lock").exists()
 
 
 class TestInitProjectGitWrapper:
