@@ -87,3 +87,31 @@ class TestForwardDeps:
         dga.scan(sample_ws / "src")
         deps = dga.get_forward_deps({"core_lib"})
         assert deps == set()
+
+
+class TestExecDependExclusion:
+    """exec-only dependencies are excluded from the ABI rebuild graph."""
+
+    def test_abi_consumers_are_affected(self, mixed_deps_ws: Path) -> None:
+        dga = DependencyGraphAnalyzer()
+        dga.scan(mixed_deps_ws / "src")
+        # build_depend, <depend>, and build_export_depend all form ABI edges
+        rdeps = dga.get_reverse_deps({"lib_abi"})
+        assert rdeps == {"abi_consumer", "shared_consumer", "export_consumer"}
+
+    def test_exec_only_consumer_not_affected(self, mixed_deps_ws: Path) -> None:
+        dga = DependencyGraphAnalyzer()
+        dga.scan(mixed_deps_ws / "src")
+        # exec_consumer depends on lib_runtime via <exec_depend> only -> dropped
+        assert dga.get_reverse_deps({"lib_runtime"}) == set()
+
+    def test_depend_tag_kept_as_abi_edge(self, mixed_deps_ws: Path) -> None:
+        dga = DependencyGraphAnalyzer()
+        dga.scan(mixed_deps_ws / "src")
+        # <depend> also expands to exec_depends but must survive via build_depends
+        assert dga.get_forward_deps({"shared_consumer"}) == {"lib_abi"}
+
+    def test_exec_only_has_no_forward_edge(self, mixed_deps_ws: Path) -> None:
+        dga = DependencyGraphAnalyzer()
+        dga.scan(mixed_deps_ws / "src")
+        assert dga.get_forward_deps({"exec_consumer"}) == set()
