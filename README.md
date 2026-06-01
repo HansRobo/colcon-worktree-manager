@@ -153,6 +153,15 @@ symlink and the real workspace are valid working paths.
 The symlink path is recorded in the worktree metadata and removed automatically
 by `cwm worktree remove`.
 
+### Concurrency / locking
+
+All worktree lifecycle operations (`add`, `remove`, `prune`, and the agent
+`git worktree` interceptions) are serialized project-wide via a POSIX `flock`
+on `.cwm/lock`. Concurrent `cwm worktree add` invocations run one after another,
+preventing corruption of `.git/worktrees` and the per-branch metadata. This is
+an intentional Linux/ROS 2 trade-off: build and test operations are deliberately
+*not* locked, so parallel builds across worktrees remain fully concurrent.
+
 ### colcon passthrough
 
 After activation, `cwm` acts as a drop-in replacement for `colcon`. Any flags
