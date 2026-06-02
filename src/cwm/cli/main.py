@@ -158,7 +158,7 @@ def ws() -> None:
     """Manage workspace operations."""
 
 
-ws.command_order = ["build", "clean", "status"]
+ws.command_order = ["build", "test", "test-result", "clean", "status"]
 
 
 @cli.group()
@@ -186,6 +186,7 @@ import cwm.cli.shell_init_cmd  # noqa: E402, F401
 import cwm.cli.worktree_cmd  # noqa: E402, F401
 import cwm.cli.repo_cmd  # noqa: E402, F401
 import cwm.cli.build_cmd  # noqa: E402, F401
+import cwm.cli.test_cmd  # noqa: E402, F401
 import cwm.cli.clean_cmd  # noqa: E402, F401
 import cwm.cli.status_cmd  # noqa: E402, F401
 import cwm.cli.env_cmd  # noqa: E402, F401

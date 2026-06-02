@@ -8,7 +8,11 @@ from unittest.mock import patch
 import pytest
 
 from cwm.errors import ColconError
-from cwm.util.colcon_runner import run_colcon_build_sourced, run_colcon_sourced
+from cwm.util.colcon_runner import (
+    run_colcon_build_sourced,
+    run_colcon_sourced,
+    run_colcon_test_result,
+)
 
 
 class TestRunColconSourced:
@@ -44,3 +48,19 @@ class TestRunColconSourced:
             run_colcon_build_sourced(tmp_path, tmp_path / "underlay", None)
 
         assert "colcon build" in mock_run.call_args[0][0][2]
+
+
+class TestRunColconTestResult:
+    def test_passes_all_and_return_code_flag(self, tmp_path: Path) -> None:
+        with patch("cwm.util.colcon_runner.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            run_colcon_test_result(tmp_path)
+
+        cmd = mock_run.call_args[0][0]
+        assert cmd == ["colcon", "test-result", "--all", "--return-code-on-test-failure"]
+
+    def test_nonzero_exit_raises_colcon_error(self, tmp_path: Path) -> None:
+        with patch("cwm.util.colcon_runner.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            with pytest.raises(ColconError, match="colcon test-result"):
+                run_colcon_test_result(tmp_path)

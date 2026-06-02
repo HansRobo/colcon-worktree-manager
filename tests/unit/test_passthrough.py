@@ -31,7 +31,7 @@ class TestBuildPassthrough:
         ws.mkdir()
 
         runner = CliRunner()
-        with patch("cwm.cli.build_cmd.find_project_root", return_value=tmp_path), \
+        with patch("cwm.cli._workspace.find_project_root", return_value=tmp_path), \
              patch("cwm.core.config.Config.load") as mock_cfg, \
              patch("cwm.core.dga.DependencyGraphAnalyzer.scan"), \
              patch("cwm.core.cdc.ColconDiscoveryController.get_changed_files_meta", return_value=[]), \
@@ -68,7 +68,7 @@ class TestBuildPassthrough:
         ws.mkdir()
 
         runner = CliRunner()
-        with patch("cwm.cli.build_cmd.find_project_root", return_value=tmp_path), \
+        with patch("cwm.cli._workspace.find_project_root", return_value=tmp_path), \
              patch("cwm.core.config.Config.load") as mock_cfg, \
              patch("cwm.core.dga.DependencyGraphAnalyzer.scan"), \
              patch("cwm.core.cdc.ColconDiscoveryController.get_changed_files_meta", return_value=[]), \

@@ -121,6 +121,22 @@ class ColconDiscoveryController:
             args.append("--symlink-install")
         return args
 
+    def generate_test_args(
+        self,
+        changed_pkgs: set[str],
+        affected_pkgs: set[str],
+    ) -> list[str]:
+        """Generate colcon test arguments for the changed+affected package set.
+
+        Unlike :meth:`generate_build_args`, ``colcon test`` has no
+        ``--allow-overriding`` / ``--symlink-install``; only ``--packages-select``
+        applies.
+        """
+        all_pkgs = sorted(changed_pkgs | affected_pkgs)
+        if not all_pkgs:
+            return []
+        return ["--packages-select", *all_pkgs]
+
     # -- COLCON_IGNORE fallback ------------------------------------------------
 
     def place_ignore_markers(self, dga: DependencyGraphAnalyzer, keep: set[str]) -> list[Path]:

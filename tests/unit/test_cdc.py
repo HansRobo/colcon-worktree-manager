@@ -38,6 +38,20 @@ class TestGenerateBuildArgs:
         assert args == []
 
 
+class TestGenerateTestArgs:
+    def test_packages_select_only(self) -> None:
+        cdc = ColconDiscoveryController(Path("/fake"))
+        args = cdc.generate_test_args({"core_lib"}, {"perception_node"})
+        assert args == ["--packages-select", "core_lib", "perception_node"]
+        # test has no build-only flags
+        assert "--allow-overriding" not in args
+        assert "--symlink-install" not in args
+
+    def test_empty_returns_empty(self) -> None:
+        cdc = ColconDiscoveryController(Path("/fake"))
+        assert cdc.generate_test_args(set(), set()) == []
+
+
 class TestIgnoreMarkers:
     def test_place_and_remove_markers(self, sample_ws: Path) -> None:
         dga = DependencyGraphAnalyzer()
