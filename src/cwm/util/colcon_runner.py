@@ -107,3 +107,19 @@ def run_colcon_test(
 ) -> int:
     """Execute ``colcon test`` in *workspace* and stream output."""
     return run_colcon("test", workspace, extra_args, env=env)
+
+
+def run_colcon_test_result(
+    workspace: Path,
+    extra_args: list[str] | None = None,
+    *,
+    env: dict[str, str] | None = None,
+) -> int:
+    """Run ``colcon test-result --all --return-code-on-test-failure`` in *workspace*.
+
+    ``colcon test`` exits 0 even when individual tests fail; driving the exit
+    code from ``test-result`` lets agents/CI detect the true pass/fail status
+    (non-zero exit raises ColconError).
+    """
+    args = ["--all", "--return-code-on-test-failure", *(extra_args or [])]
+    return run_colcon("test-result", workspace, args, env=env)

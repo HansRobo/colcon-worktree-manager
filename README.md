@@ -94,6 +94,8 @@ cwm deactivate
 | Command | Description |
 |---------|-------------|
 | `cwm ws build [--dry-run] [--no-rdeps]` | Build changed packages + their ABI reverse deps (`build`/`build_export`; `exec`-only excluded) in the active worktree |
+| `cwm ws test [-w BRANCH] [--dry-run] [--no-rdeps]` | Run `colcon test` on changed packages + their ABI reverse deps (underlay+overlay sourced) |
+| `cwm ws test-result [-w BRANCH]` | Show the test summary; exits non-zero if any test failed (`--return-code-on-test-failure`) |
 | `cwm ws clean [--all]` | Clean build artifacts |
 | `cwm ws status [--json]` | Show the state of the base workspace and all worktrees |
 

@@ -61,7 +61,7 @@ class TestCliHelp:
         result = runner.invoke(cli, ["ws", "--help"])
 
         assert result.exit_code == 0, result.output
-        assert _listed_commands(result.output) == ["build", "clean", "status"]
+        assert _listed_commands(result.output) == ["build", "test", "test-result", "clean", "status"]
 
     def test_inspect_help_lists_inspection_commands(self) -> None:
         runner = CliRunner()
