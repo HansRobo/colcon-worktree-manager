@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cwm.core.cdc import ColconDiscoveryController
+from cwm.core.colcon_discovery import ColconDiscoveryController
 from cwm.core.config import Config
-from cwm.core.dga import DependencyGraphAnalyzer
-from cwm.core.wsm import WorktreeMeta
+from cwm.core.dependency_graph import DependencyGraphAnalyzer
+from cwm.core.worktree_state import WorktreeMeta
 
 
 @dataclass
@@ -36,21 +36,21 @@ def compute_changeset(config: Config, branch: str, *, no_rdeps: bool = False) ->
     """
     src_path = config.worktree_src_path(branch)
 
-    dga = DependencyGraphAnalyzer()
-    dga.scan(src_path)
+    graph = DependencyGraphAnalyzer()
+    graph.scan(src_path)
 
-    cdc = ColconDiscoveryController(src_path)
+    discovery = ColconDiscoveryController(src_path)
     meta = WorktreeMeta.load(config.worktree_meta_path(branch))
-    changed_files = cdc.get_changed_files_meta(
+    changed_files = discovery.get_changed_files_meta(
         [meta.repo_name], {meta.repo_name: meta.base_sha}
     )
-    changed = cdc.get_changed_packages(dga, changed_files)
+    changed = discovery.get_changed_packages(graph, changed_files)
 
-    affected: set[str] = set() if no_rdeps else dga.get_reverse_deps(changed)
-    build_order = dga.topological_sort(changed | affected)
+    affected: set[str] = set() if no_rdeps else graph.get_reverse_deps(changed)
+    build_order = graph.topological_sort(changed | affected)
 
     return Changeset(
-        package_count=len(dga.packages),
+        package_count=len(graph.packages),
         changed=changed,
         affected=affected,
         build_order=build_order,

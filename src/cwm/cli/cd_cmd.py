@@ -10,9 +10,9 @@ import click
 from cwm.cli.completion import complete_cd_repos, complete_cd_targets, complete_worktree_branches
 from cwm.cli.main import cli
 from cwm.core.config import Config
-from cwm.core.wsm import WorktreeStateManager
+from cwm.core.worktree_state import WorktreeStateManager
 from cwm.errors import CWMError
-from cwm.util.fs import find_project_root
+from cwm.util.filesystem import find_project_root
 
 _CD_HINT = """\
 cwm cd requires shell integration to change the current directory.
@@ -43,7 +43,7 @@ def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
     """Return the resolved absolute path, or raise with an error message."""
     root = find_project_root()
     config = Config.load(root)
-    wsm = WorktreeStateManager(config)
+    manager = WorktreeStateManager(config)
 
     # No args → active workspace root (or repo checkout when auto_subrepo)
     if not args:
@@ -53,7 +53,7 @@ def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
                 branch = os.environ.get("CWM_WORKTREE")
                 if branch:
                     try:
-                        meta = wsm.get_worktree_meta(branch)
+                        meta = manager.get_worktree_meta(branch)
                         if meta.repo:
                             checkout = config.worktree_src_path(branch) / meta.repo_name
                             if checkout.exists():
@@ -72,7 +72,7 @@ def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
         return str(config.project_root)
 
     # Defer branch list until actually needed
-    branches = [m.branch for m in wsm.list_worktrees()]
+    branches = [m.branch for m in manager.list_worktrees()]
 
     # Branch match → workspace root (or repo checkout when auto_subrepo) or named repo
     if target in branches:
@@ -80,7 +80,7 @@ def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
         if len(args) == 1:
             if auto_subrepo:
                 try:
-                    meta = wsm.get_worktree_meta(target)
+                    meta = manager.get_worktree_meta(target)
                     if meta.repo:
                         checkout = config.worktree_src_path(target) / meta.repo_name
                         if checkout.exists():
@@ -89,7 +89,7 @@ def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
                     pass
             return str(ws_path)
         repo_arg = args[1]
-        meta = wsm.get_worktree_meta(target)
+        meta = manager.get_worktree_meta(target)
         if repo_arg not in (meta.repo, meta.repo_name):
             raise CWMError(
                 f"Repository '{repo_arg}' not found in worktree '{target}'. "
@@ -103,7 +103,7 @@ def _resolve(args: tuple[str, ...], *, auto_subrepo: bool = False) -> str:
         branch = os.environ.get("CWM_WORKTREE", "")
         if branch:
             try:
-                meta = wsm.get_worktree_meta(branch)
+                meta = manager.get_worktree_meta(branch)
                 if meta.repo and target in (meta.repo, meta.repo_name):
                     return str(config.worktree_src_path(branch) / meta.repo_name)
             except CWMError:

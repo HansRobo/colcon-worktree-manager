@@ -10,7 +10,7 @@ import click
 from cwm.cli.completion import complete_distros
 from cwm.cli.main import cli
 from cwm.core.config import CONFIG_DIR
-from cwm.core.wsm import WorktreeStateManager
+from cwm.core.worktree_state import WorktreeStateManager
 from cwm.util.ros_env import ROS_INSTALL_BASE, detect_system_underlay, list_available_distros
 
 

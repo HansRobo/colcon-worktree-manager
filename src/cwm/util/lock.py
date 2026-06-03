@@ -5,7 +5,7 @@ agent/CLI invocations cannot corrupt .git/worktrees or the per-branch metadata
 under .cwm/worktrees/.  Linux/POSIX only (ROS 2 dev environment); intentionally
 not portable to Windows.
 
-Invariant relied upon for correctness: WSM lifecycle methods never call one
+Invariant relied upon for correctness: WorktreeStateManager lifecycle methods never call one
 another, so cwm_lock is never re-acquired through a second open file
 description in the same process.  flock on Linux would deadlock on such
 re-entry.  Do not introduce nested lifecycle calls.

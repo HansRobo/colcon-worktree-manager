@@ -9,7 +9,7 @@ from cwm.cli.main import ws
 from cwm.core.config import Config
 from cwm.errors import CWMError, GitError
 from cwm.util import git
-from cwm.util.fs import find_project_root
+from cwm.util.filesystem import find_project_root
 
 
 @ws.command()
@@ -19,11 +19,11 @@ def status(as_json: bool) -> None:
     try:
         root = find_project_root()
         config = Config.load(root)
-        from cwm.core.wsm import WorktreeStateManager
-        wsm = WorktreeStateManager(config)
+        from cwm.core.worktree_state import WorktreeStateManager
+        manager = WorktreeStateManager(config)
 
         base_info = _collect_base(config)
-        worktrees_info = _collect_worktrees(config, wsm)
+        worktrees_info = _collect_worktrees(config, manager)
 
         if as_json:
             click.echo(json.dumps({"base": base_info, "worktrees": worktrees_info}, indent=2))
@@ -55,8 +55,8 @@ def _collect_base(config: Config) -> dict:
     }
 
 
-def _collect_worktrees(config: Config, wsm) -> list[dict]:
-    metas = wsm.list_worktrees()
+def _collect_worktrees(config: Config, manager) -> list[dict]:
+    metas = manager.list_worktrees()
     result = []
     for meta in metas:
         ws_path = config.worktree_ws_path(meta.branch)
@@ -109,16 +109,16 @@ def _print_human(base: dict, worktrees: list[dict]) -> None:
 
     click.echo()
     click.echo("Worktrees:")
-    for wt in worktrees:
-        if not wt["exists"]:
+    for worktree in worktrees:
+        if not worktree["exists"]:
             status_str = click.style("missing", fg="red")
-        elif wt["built"]:
+        elif worktree["built"]:
             status_str = click.style("built", fg="green")
         else:
             status_str = click.style("not built", fg="yellow")
 
-        dirty_str = click.style(" dirty", fg="red") if wt["dirty"] else ""
-        ahead_str = f"  +{wt['ahead']} commit(s)" if wt["ahead"] else ""
-        repo_str = f"  [{wt['repo']}]" if wt.get("repo") else ""
+        dirty_str = click.style(" dirty", fg="red") if worktree["dirty"] else ""
+        ahead_str = f"  +{worktree['ahead']} commit(s)" if worktree["ahead"] else ""
+        repo_str = f"  [{worktree['repo']}]" if worktree.get("repo") else ""
 
-        click.echo(f"  {wt['branch']}  {status_str}{dirty_str}{ahead_str}{repo_str}")
+        click.echo(f"  {worktree['branch']}  {status_str}{dirty_str}{ahead_str}{repo_str}")

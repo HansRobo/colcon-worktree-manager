@@ -11,7 +11,7 @@ from click.testing import CliRunner
 from cwm.cli.main import cli
 from cwm.cli.worktree_cmd import _parse_git_worktree_add
 from cwm.core.config import Config
-from cwm.core.wsm import WorktreeMeta, WorktreeStateManager
+from cwm.core.worktree_state import WorktreeMeta, WorktreeStateManager
 from tests.conftest import make_git_repo
 
 
@@ -158,9 +158,9 @@ class TestHookList:
 
     def test_lists_worktree_using_agent_symlink(self, project: Config, tmp_path: Path, monkeypatch) -> None:
         link = tmp_path / "feature-x"
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-x")
-        wsm.register_agent_symlink("feature-x", link)
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-x")
+        manager.register_agent_symlink("feature-x", link)
 
         result = _invoke_hook(project, ["list"], monkeypatch)
         assert result.exit_code == 0
@@ -169,9 +169,9 @@ class TestHookList:
 
     def test_porcelain_format(self, project: Config, tmp_path: Path, monkeypatch) -> None:
         link = tmp_path / "feature-x"
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-x")
-        wsm.register_agent_symlink("feature-x", link)
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-x")
+        manager.register_agent_symlink("feature-x", link)
 
         result = _invoke_hook(project, ["list", "--porcelain"], monkeypatch)
         assert result.exit_code == 0
@@ -187,9 +187,9 @@ class TestHookList:
 class TestHookRemove:
     def test_remove_by_symlink_path(self, project: Config, tmp_path: Path, monkeypatch) -> None:
         link = tmp_path / "feature-x"
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-x")
-        wsm.register_agent_symlink("feature-x", link)
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-x")
+        manager.register_agent_symlink("feature-x", link)
 
         result = _invoke_hook(project, ["remove", str(link)], monkeypatch)
         assert result.exit_code == 0, (result.stdout, result.stderr)
@@ -197,8 +197,8 @@ class TestHookRemove:
         assert not link.is_symlink()
 
     def test_remove_by_workspace_path(self, project: Config, monkeypatch) -> None:
-        wsm = WorktreeStateManager(project)
-        ws_path = wsm.create_worktree("feature-x")
+        manager = WorktreeStateManager(project)
+        ws_path = manager.create_worktree("feature-x")
 
         result = _invoke_hook(project, ["remove", str(ws_path)], monkeypatch)
         assert result.exit_code == 0
@@ -222,8 +222,8 @@ class TestHookPrune:
         assert "Pruned 0" in result.stderr
 
     def test_prune_removes_stale(self, project: Config, monkeypatch) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-x")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-x")
         import shutil
         shutil.rmtree(project.worktree_ws_path("feature-x"))
 
@@ -297,11 +297,11 @@ class TestHookRemovePathNormalisation:
         """A symlink registered from one cwd must be removable from another
         cwd using a path that contains '..' (regression for Path.absolute()
         not collapsing '..' segments)."""
-        from cwm.core.wsm import WorktreeStateManager
+        from cwm.core.worktree_state import WorktreeStateManager
         link = tmp_path / "feature-x"
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-x")
-        wsm.register_agent_symlink("feature-x", link)
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-x")
+        manager.register_agent_symlink("feature-x", link)
 
         # Invoke from a sibling directory using ../feature-x.  Set
         # CWM_PROJECT_ROOT so the hook can locate the project from cwd that

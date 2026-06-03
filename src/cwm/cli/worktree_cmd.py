@@ -13,10 +13,10 @@ import click
 from cwm.cli.completion import complete_git_branches, complete_worktree_branches
 from cwm.cli.main import worktree
 from cwm.core.config import Config
-from cwm.core.wsm import WorktreeStateManager
+from cwm.core.worktree_state import WorktreeStateManager
 from cwm.errors import CWMError
 from cwm.util import git as gitutil
-from cwm.util.fs import find_project_root
+from cwm.util.filesystem import find_project_root
 
 
 def _load() -> tuple[Config, WorktreeStateManager]:
@@ -40,8 +40,8 @@ def _json_ok(payload: dict[str, Any]) -> None:
 def add(branch: str, as_json: bool) -> None:
     """Create a new overlay worktree for BRANCH."""
     try:
-        config, wsm = _load()
-        ws_path = wsm.create_worktree(branch)
+        config, manager = _load()
+        ws_path = manager.create_worktree(branch)
         repo_name = Path(config.repo).name if config.repo else ""
         src_path = config.worktree_src_path(branch) / repo_name
 
@@ -74,7 +74,7 @@ def add(branch: str, as_json: bool) -> None:
 def remove(branch: str, force: bool, delete_branch: bool, as_json: bool) -> None:
     """Remove the overlay worktree for BRANCH."""
     try:
-        config, wsm = _load()
+        config, manager = _load()
         if not force and not as_json:
             ws_path = config.worktree_ws_path(branch)
             click.echo("This will permanently remove:")
@@ -83,7 +83,7 @@ def remove(branch: str, force: bool, delete_branch: bool, as_json: bool) -> None
             if delete_branch:
                 click.echo("  (git branch will also be deleted)")
             click.confirm("Continue?", abort=True)
-        wsm.remove_worktree(branch, force=force, delete_branch=delete_branch)
+        manager.remove_worktree(branch, force=force, delete_branch=delete_branch)
 
         if as_json:
             _json_ok({"branch": branch})
@@ -100,8 +100,8 @@ def remove(branch: str, force: bool, delete_branch: bool, as_json: bool) -> None
 def list_worktrees_cmd(as_json: bool) -> None:
     """List all managed worktrees."""
     try:
-        config, wsm = _load()
-        metas = wsm.list_worktrees()
+        config, manager = _load()
+        metas = manager.list_worktrees()
 
         if as_json:
             items = []
@@ -165,26 +165,26 @@ def _parse_git_worktree_add(
     parser.add_argument("-B", dest="reset_new_branch")
     parser.add_argument("positional", nargs="*")
     try:
-        ns = parser.parse_args(args)
+        parsed = parser.parse_args(args)
     except (argparse.ArgumentError, SystemExit):
         return None
-    pos = ns.positional or []
+    pos = parsed.positional or []
     if not pos:
         return None
     path = Path(pos[0])
-    branch = ns.new_branch or ns.reset_new_branch
+    branch = parsed.new_branch or parsed.reset_new_branch
     if branch is None:
         branch = pos[1] if len(pos) >= 2 else path.name
     ignored: list[str] = []
-    if ns.force:
+    if parsed.force:
         ignored.append("--force")
-    if ns.detach:
+    if parsed.detach:
         ignored.append("--detach")
-    if ns.no_checkout:
+    if parsed.no_checkout:
         ignored.append("--no-checkout")
-    if ns.lock:
+    if parsed.lock:
         ignored.append("--lock")
-    if ns.orphan:
+    if parsed.orphan:
         ignored.append("--orphan")
     return path, branch, ignored
 
@@ -220,18 +220,18 @@ def _hook_add(ctx: click.Context, rest: list[str]) -> None:
         )
 
     try:
-        config, wsm = _load()
-        ws_path = wsm.create_worktree(branch)
+        config, manager = _load()
+        ws_path = manager.create_worktree(branch)
     except CWMError as exc:
         _hook_msg(str(exc), fg="red")
         ctx.exit(1)
 
     try:
-        link_path = wsm.register_agent_symlink(branch, requested_path)
+        link_path = manager.register_agent_symlink(branch, requested_path)
     except (CWMError, OSError) as exc:
         # Roll back the half-created worktree so retry is not blocked.
         try:
-            wsm.remove_worktree(branch, force=True)
+            manager.remove_worktree(branch, force=True)
         except CWMError:
             pass
         _hook_msg(
@@ -262,7 +262,7 @@ def _hook_add(ctx: click.Context, rest: list[str]) -> None:
 def _hook_list(ctx: click.Context, rest: list[str]) -> None:
     porcelain = "--porcelain" in rest
     try:
-        config, wsm = _load()
+        config, manager = _load()
     except CWMError as exc:
         _hook_msg(str(exc), fg="red")
         ctx.exit(1)
@@ -286,7 +286,7 @@ def _hook_list(ctx: click.Context, rest: list[str]) -> None:
 
     # Augment with CWM-managed entries, replacing the workspace path with the
     # agent-facing symlink when one is registered.
-    for meta in wsm.list_worktrees():
+    for meta in manager.list_worktrees():
         ws_path = config.worktree_ws_path(meta.branch)
         checkout = ws_path / "src" / meta.repo_name
         sha = meta.base_sha
@@ -328,7 +328,7 @@ def _hook_remove(ctx: click.Context, rest: list[str]) -> None:
     parser.add_argument("-f", "--force", action="store_true")
     parser.add_argument("positional", nargs="*")
     try:
-        ns = parser.parse_args(rest)
+        parsed = parser.parse_args(rest)
     except (argparse.ArgumentError, SystemExit):
         _hook_msg(
             "Could not parse 'git worktree remove' arguments. "
@@ -337,16 +337,16 @@ def _hook_remove(ctx: click.Context, rest: list[str]) -> None:
         )
         ctx.exit(1)
 
-    if not ns.positional:
+    if not parsed.positional:
         _hook_msg("'git worktree remove' requires a <path> argument.", fg="yellow")
         ctx.exit(1)
 
-    target = Path(os.path.abspath(ns.positional[0]))
-    config, wsm = _load()
+    target = Path(os.path.abspath(parsed.positional[0]))
+    config, manager = _load()
 
     target_resolved = target.resolve(strict=False)
     branch: str | None = None
-    for meta in wsm.list_worktrees():
+    for meta in manager.list_worktrees():
         if str(target) in meta.agent_symlinks:
             branch = meta.branch
             break
@@ -364,7 +364,7 @@ def _hook_remove(ctx: click.Context, rest: list[str]) -> None:
         ctx.exit(1)
 
     try:
-        wsm.remove_worktree(branch, force=ns.force)
+        manager.remove_worktree(branch, force=parsed.force)
     except CWMError as exc:
         _hook_msg(str(exc), fg="red")
         ctx.exit(1)
@@ -373,9 +373,9 @@ def _hook_remove(ctx: click.Context, rest: list[str]) -> None:
 
 
 def _hook_prune(ctx: click.Context, rest: list[str]) -> None:
-    _config, wsm = _load()
+    _config, manager = _load()
     try:
-        pruned = wsm.prune_stale()
+        pruned = manager.prune_stale()
     except CWMError as exc:
         _hook_msg(str(exc), fg="red")
         ctx.exit(1)
@@ -417,8 +417,8 @@ def prune(force: bool) -> None:
     Also runs 'git worktree prune' to clean up stale git worktree entries.
     """
     try:
-        config, wsm = _load()
-        metas = wsm.list_worktrees()
+        config, manager = _load()
+        metas = manager.list_worktrees()
         stale_branches = [m.branch for m in metas if not config.worktree_ws_path(m.branch).exists()]
 
         if not stale_branches:
@@ -433,7 +433,7 @@ def prune(force: bool) -> None:
         if not force:
             click.confirm("Remove stale metadata?", abort=True)
 
-        pruned = wsm.prune_stale(stale_branches)
+        pruned = manager.prune_stale(stale_branches)
         for branch in pruned:
             click.echo(f"  Pruned: {branch}")
         click.echo(f"Pruned {len(pruned)} stale worktree(s).")

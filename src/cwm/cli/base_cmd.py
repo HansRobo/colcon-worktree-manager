@@ -24,7 +24,7 @@ from cwm.core.config import Config
 from cwm.errors import CWMError, NoRepoSelectedError, UnderlayNotFoundError
 from cwm.util import git
 from cwm.util.colcon_runner import run_colcon_sourced
-from cwm.util.fs import find_project_root
+from cwm.util.filesystem import find_project_root
 
 
 def _build_base(config: Config, colcon_args: list[str]) -> None:

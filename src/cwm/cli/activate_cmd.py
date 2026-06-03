@@ -13,7 +13,7 @@ from cwm.cli.completion import complete_worktree_branches
 from cwm.cli.main import cli
 from cwm.core.config import Config
 from cwm.errors import CWMError
-from cwm.util.fs import find_project_root
+from cwm.util.filesystem import find_project_root
 
 
 # Environment variables that ROS/colcon sourcing will mutate and that the
@@ -193,9 +193,9 @@ cwm worktree add {q_branch} || exit 1
 
 def _list_existing_worktrees(config: Config) -> list[str]:
     """Return branch names of existing worktrees, sorted."""
-    from cwm.core.wsm import WorktreeStateManager
-    wsm = WorktreeStateManager(config)
-    return [m.branch for m in wsm.list_worktrees()]
+    from cwm.core.worktree_state import WorktreeStateManager
+    manager = WorktreeStateManager(config)
+    return [m.branch for m in manager.list_worktrees()]
 
 
 def _interactive_select(config: Config) -> tuple[str, bool] | None:
@@ -282,7 +282,7 @@ def activate(branch: str | None) -> None:
         # Lazily (re)generate the .cwm/bin/git wrapper.  Projects initialised
         # before this feature existed, or where the wrapper was tampered with,
         # need the file to be present before PATH manipulation is meaningful.
-        from cwm.core.wsm import _write_git_wrapper
+        from cwm.core.worktree_state import _write_git_wrapper
         wrapper_path = config.cwm_dir / "bin" / "git"
         if not wrapper_path.is_file() or not os.access(wrapper_path, os.X_OK):
             _write_git_wrapper(wrapper_path)

@@ -20,7 +20,7 @@ from cwm.errors import (
     WorktreeNotFoundError,
 )
 from cwm.util import git
-from cwm.util.fs import ensure_dir
+from cwm.util.filesystem import ensure_dir
 from cwm.util.lock import cwm_lock
 
 # Wrapper script installed at .cwm/bin/git so that subprocess-level 'git'

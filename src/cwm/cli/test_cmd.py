@@ -43,7 +43,7 @@ def test(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_args
             no_rdeps=no_rdeps,
             dry_run=dry_run,
             colcon_args=colcon_args,
-            generate_args=lambda cdc, cs, _config: cdc.generate_test_args(cs.changed, cs.affected),
+            generate_args=lambda discovery, changeset, _config: discovery.generate_test_args(changeset.changed, changeset.affected),
             done_message="Tests finished. Run 'cwm ws test-result' to view the summary and pass/fail status.",
         )
     except CWMError as exc:
