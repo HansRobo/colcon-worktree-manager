@@ -165,24 +165,41 @@ class DependencyGraphAnalyzer:
                     queue.append(dep)
         return visited
 
-    def get_reverse_deps(self, packages: set[str]) -> set[str]:
-        """Return all packages that transitively depend on *packages*.
+    def get_reverse_deps(self, packages: set[str], *, max_depth: int | None = None) -> set[str]:
+        """Return packages that transitively depend on *packages*.
 
         This is the "affected set" - all packages that need to be rebuilt
         when any package in *packages* changes, to maintain ABI safety.
         Only build/build_export dependents are tracked (see :meth:`scan`), so
         runtime-only (``exec_depends``) consumers are NOT included here.
         Does NOT include *packages* themselves.
+
+        With *max_depth* set, the breadth-first walk is bounded to that many
+        levels of reverse edges (``max_depth=1`` returns only direct consumers).
+        ``max_depth=None`` walks the full transitive closure (default).
         """
         visited: set[str] = set()
-        queue: deque[str] = deque(packages)
-        while queue:
-            pkg = queue.popleft()
-            for rdep in self._reverse.get(pkg, ()):
-                if rdep not in visited and rdep not in packages:
-                    visited.add(rdep)
-                    queue.append(rdep)
+        # Level-by-level BFS so depth can be bounded; frontier holds one level.
+        frontier: set[str] = set(packages)
+        depth = 0
+        while frontier and (max_depth is None or depth < max_depth):
+            next_frontier: set[str] = set()
+            for pkg in frontier:
+                for rdep in self._reverse.get(pkg, ()):
+                    if rdep not in visited and rdep not in packages:
+                        visited.add(rdep)
+                        next_frontier.add(rdep)
+            frontier = next_frontier
+            depth += 1
         return visited
+
+    def forward_edges(self) -> dict[str, set[str]]:
+        """Return a copy of the forward adjacency (package -> direct deps).
+
+        Public accessor for read-only consumers (e.g. ``cwm inspect graph``)
+        so the internal ``_forward`` map is not exposed or mutated.
+        """
+        return {name: set(deps) for name, deps in self._forward.items()}
 
     def topological_sort(self, packages: set[str]) -> list[str]:
         """Return a topological ordering of *packages* (dependencies first).

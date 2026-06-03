@@ -133,6 +133,7 @@ cli.command_order = [
     "ws",
     "inspect",
     "base",
+    "doctor",
 ]
 cli.enable_passthrough = True
 cli.moved_commands = {
@@ -166,7 +167,7 @@ def inspect() -> None:
     """Inspect CWM state for humans and tooling."""
 
 
-inspect.command_order = ["env", "detect"]
+inspect.command_order = ["env", "detect", "changed", "graph"]
 
 
 @cli.group()
@@ -191,4 +192,7 @@ import cwm.cli.clean_cmd  # noqa: E402, F401
 import cwm.cli.status_cmd  # noqa: E402, F401
 import cwm.cli.env_cmd  # noqa: E402, F401
 import cwm.cli.detect_cmd  # noqa: E402, F401
+import cwm.cli.inspect_changed_cmd  # noqa: E402, F401
+import cwm.cli.inspect_graph_cmd  # noqa: E402, F401
 import cwm.cli.base_cmd  # noqa: E402, F401
+import cwm.cli.doctor_cmd  # noqa: E402, F401

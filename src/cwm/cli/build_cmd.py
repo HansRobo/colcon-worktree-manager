@@ -25,18 +25,36 @@ from cwm.errors import CWMError
     is_flag=True,
     help="Skip reverse dependency analysis (unsafe, faster).",
 )
+@click.option(
+    "--rdeps-depth",
+    type=int,
+    default=None,
+    metavar="N",
+    help="Limit reverse dependency rebuild to N levels (1 = direct consumers only).",
+)
 @click.argument("colcon_args", nargs=-1, type=click.UNPROCESSED, shell_complete=suppress_completion)
-def build(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_args: tuple[str, ...]) -> None:
+def build(
+    worktree_branch: str | None,
+    dry_run: bool,
+    no_rdeps: bool,
+    rdeps_depth: int | None,
+    colcon_args: tuple[str, ...],
+) -> None:
     """Build changed packages and their reverse dependencies.
 
     Must be run with an active workspace (source <(cwm activate <branch>))
     or with -w/--worktree. Any extra arguments after ``--`` are forwarded to colcon build.
     """
+    if no_rdeps and rdeps_depth is not None:
+        raise click.UsageError("--no-rdeps and --rdeps-depth are mutually exclusive.")
+    elif rdeps_depth is not None and rdeps_depth < 1:
+        raise click.UsageError("--rdeps-depth must be 1 or greater.")
     try:
         run_workspace_colcon(
             "build",
             worktree_branch=worktree_branch,
             no_rdeps=no_rdeps,
+            rdeps_depth=rdeps_depth,
             dry_run=dry_run,
             colcon_args=colcon_args,
             generate_args=lambda discovery, changeset, config: discovery.generate_build_args(

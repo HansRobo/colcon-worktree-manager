@@ -93,7 +93,7 @@ cwm deactivate
 
 | Command | Description |
 |---------|-------------|
-| `cwm ws build [--dry-run] [--no-rdeps]` | Build changed packages + their ABI reverse deps (`build`/`build_export`; `exec`-only excluded) in the active worktree |
+| `cwm ws build [--dry-run] [--no-rdeps] [--rdeps-depth N]` | Build changed packages + their ABI reverse deps (`build`/`build_export`; `exec`-only excluded) in the active worktree |
 | `cwm ws test [-w BRANCH] [--dry-run] [--no-rdeps]` | Run `colcon test` on changed packages + their ABI reverse deps (underlay+overlay sourced) |
 | `cwm ws test-result [-w BRANCH]` | Show the test summary; exits non-zero if any test failed (`--return-code-on-test-failure`) |
 | `cwm ws clean [--all]` | Clean build artifacts |
@@ -116,6 +116,17 @@ Several commands accept `--json` for machine-readable output: `cwm ws status`, `
 |---------|-------------|
 | `cwm inspect env <branch>` | Show environment variables and setup script paths for a worktree (JSON) |
 | `cwm inspect detect [--cwd PATH]` | Detect whether the directory is inside a CWM project (outputs JSON) |
+| `cwm inspect changed [-w BRANCH] [--json]` | Preview changed packages + their ABI reverse-dep rebuild set without building |
+| `cwm inspect graph [-w BRANCH] [--json]` | Print the package dependency graph (`build`/`build_export` edges), scan only |
+
+`cwm doctor [--json]` gives a cross-cutting health check: base build/dirty
+state with a count of stale base build dirs (run `cwm base doctor --fix` to
+repair), plus each worktree's built/dirty/missing status.
+
+`ws build --rdeps-depth N` bounds the reverse-dependency rebuild to `N` levels
+(`1` = direct consumers only) — a middle ground between the full transitive
+rebuild (default) and `--no-rdeps` (skip entirely; the two are mutually
+exclusive).
 
 ### Base workspace
 

@@ -26,13 +26,19 @@ class Changeset:
     build_order: list[str]
 
 
-def compute_changeset(config: Config, branch: str, *, no_rdeps: bool = False) -> Changeset:
+def compute_changeset(
+    config: Config, branch: str, *, no_rdeps: bool = False, rdeps_depth: int | None = None
+) -> Changeset:
     """Detect changed packages in *branch*'s worktree and their rebuild order.
 
     Scans the worktree ``src/`` for ROS packages, diffs the tracked repo against
     the SHA recorded at worktree creation, maps changed files to packages, and
     (unless *no_rdeps*) adds reverse dependencies for ABI safety.  The combined
     set is returned in topological build order.
+
+    *rdeps_depth* bounds the reverse-dependency walk to that many levels (see
+    :meth:`DependencyGraphAnalyzer.get_reverse_deps`); ``None`` walks the full
+    closure.  *no_rdeps* takes precedence and skips reverse deps entirely.
     """
     src_path = config.worktree_src_path(branch)
 
@@ -46,7 +52,9 @@ def compute_changeset(config: Config, branch: str, *, no_rdeps: bool = False) ->
     )
     changed = discovery.get_changed_packages(graph, changed_files)
 
-    affected: set[str] = set() if no_rdeps else graph.get_reverse_deps(changed)
+    affected: set[str] = (
+        set() if no_rdeps else graph.get_reverse_deps(changed, max_depth=rdeps_depth)
+    )
     build_order = graph.topological_sort(changed | affected)
 
     return Changeset(
