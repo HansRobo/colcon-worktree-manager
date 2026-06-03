@@ -25,6 +25,15 @@ def _match(items: Iterable[str], incomplete: str) -> list[CompletionItem]:
     return [CompletionItem(s) for s in items if s.startswith(incomplete)]
 
 
+def suppress_completion(ctx: click.Context, param: click.Parameter, incomplete: str) -> list:
+    """Return no completions, suppressing Click's fallback to filesystem completion.
+
+    Used on variadic ``colcon_args`` so tab-completion does not surface the
+    workspace's build/ directory (compopt -o default).
+    """
+    return []
+
+
 def complete_worktree_branches(
     ctx: click.Context, param: click.Parameter, incomplete: str
 ) -> list[CompletionItem]:

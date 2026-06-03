@@ -91,11 +91,16 @@ def _collect_worktrees(config: Config, wsm) -> list[dict]:
     return result
 
 
-def _print_human(base: dict, worktrees: list[dict]) -> None:
+def _print_base_status(base: dict) -> None:
+    """Print the one-line base workspace status (shared with ``cwm base status``)."""
     built_mark = click.style("built", fg="green") if base["built"] else click.style("not built", fg="yellow")
     dirty_mark = click.style(" dirty", fg="red") if base["dirty"] else ""
     repo_str = f"  [{base['repo']}]" if base.get("repo") else ""
     click.echo(f"Base workspace  {built_mark}{dirty_mark}{repo_str}")
+
+
+def _print_human(base: dict, worktrees: list[dict]) -> None:
+    _print_base_status(base)
 
     if not worktrees:
         click.echo()
