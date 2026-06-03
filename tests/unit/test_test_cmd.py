@@ -24,12 +24,12 @@ def _patched_changeset(tmp_path: Path, ws: Path, *, changed: set[str], affected:
     """Patch the changeset pipeline + config the way test_passthrough does for build."""
     with patch("cwm.cli._workspace.find_project_root", return_value=tmp_path), \
          patch("cwm.core.config.Config.load") as mock_cfg, \
-         patch("cwm.core.dga.DependencyGraphAnalyzer.scan"), \
-         patch("cwm.core.cdc.ColconDiscoveryController.get_changed_files_meta", return_value=[]), \
-         patch("cwm.core.cdc.ColconDiscoveryController.get_changed_packages", return_value=changed), \
-         patch("cwm.core.dga.DependencyGraphAnalyzer.get_reverse_deps", return_value=affected), \
-         patch("cwm.core.dga.DependencyGraphAnalyzer.topological_sort", side_effect=lambda pkgs: sorted(pkgs)), \
-         patch("cwm.core.wsm.WorktreeMeta.load") as mock_meta:
+         patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.scan"), \
+         patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_files_meta", return_value=[]), \
+         patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_packages", return_value=changed), \
+         patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.get_reverse_deps", return_value=affected), \
+         patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.topological_sort", side_effect=lambda pkgs: sorted(pkgs)), \
+         patch("cwm.core.worktree_state.WorktreeMeta.load") as mock_meta:
 
         cfg = mock_cfg.return_value
         cfg.worktree_ws_path.return_value = ws

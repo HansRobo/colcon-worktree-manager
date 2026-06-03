@@ -23,69 +23,69 @@ def _mock_config(tmp_path: Path) -> MagicMock:
 class TestComputeChangeset:
     def test_includes_reverse_deps_in_topological_order(self, tmp_path: Path) -> None:
         config = _mock_config(tmp_path)
-        with patch("cwm.core.dga.DependencyGraphAnalyzer.scan"), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.packages",
+        with patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.scan"), \
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.packages",
                    new_callable=PropertyMock, return_value={"a", "b", "c"}), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_files_meta",
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_files_meta",
                    return_value=["repo/a/src/main.cpp"]), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_packages",
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_packages",
                    return_value={"a"}), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.get_reverse_deps",
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.get_reverse_deps",
                    return_value={"b"}), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.topological_sort",
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.topological_sort",
                    side_effect=sorted), \
-             patch("cwm.core.wsm.WorktreeMeta.load") as mock_meta:
+             patch("cwm.core.worktree_state.WorktreeMeta.load") as mock_meta:
             mock_meta.return_value.repo_name = "repo"
             mock_meta.return_value.base_sha = "abc123"
 
-            cs = compute_changeset(config, "feature-x")
+            changeset = compute_changeset(config, "feature-x")
 
-        assert cs.package_count == 3
-        assert cs.changed == {"a"}
-        assert cs.affected == {"b"}
-        assert cs.build_order == ["a", "b"]
+        assert changeset.package_count == 3
+        assert changeset.changed == {"a"}
+        assert changeset.affected == {"b"}
+        assert changeset.build_order == ["a", "b"]
 
     def test_no_rdeps_skips_reverse_dependency_analysis(self, tmp_path: Path) -> None:
         config = _mock_config(tmp_path)
-        with patch("cwm.core.dga.DependencyGraphAnalyzer.scan"), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.packages",
+        with patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.scan"), \
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.packages",
                    new_callable=PropertyMock, return_value={"a", "b"}), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_files_meta",
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_files_meta",
                    return_value=["repo/a/src/main.cpp"]), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_packages",
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_packages",
                    return_value={"a"}), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.get_reverse_deps") as mock_rev, \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.topological_sort",
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.get_reverse_deps") as mock_rev, \
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.topological_sort",
                    side_effect=sorted), \
-             patch("cwm.core.wsm.WorktreeMeta.load") as mock_meta:
+             patch("cwm.core.worktree_state.WorktreeMeta.load") as mock_meta:
             mock_meta.return_value.repo_name = "repo"
             mock_meta.return_value.base_sha = "abc123"
 
-            cs = compute_changeset(config, "feature-x", no_rdeps=True)
+            changeset = compute_changeset(config, "feature-x", no_rdeps=True)
 
         mock_rev.assert_not_called()
-        assert cs.affected == set()
-        assert cs.build_order == ["a"]
+        assert changeset.affected == set()
+        assert changeset.build_order == ["a"]
 
     def test_no_changes_yields_empty_build_order(self, tmp_path: Path) -> None:
         config = _mock_config(tmp_path)
-        with patch("cwm.core.dga.DependencyGraphAnalyzer.scan"), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.packages",
+        with patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.scan"), \
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.packages",
                    new_callable=PropertyMock, return_value={"a", "b"}), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_files_meta",
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_files_meta",
                    return_value=[]), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_packages",
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_packages",
                    return_value=set()), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.get_reverse_deps",
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.get_reverse_deps",
                    return_value=set()), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.topological_sort",
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.topological_sort",
                    side_effect=sorted), \
-             patch("cwm.core.wsm.WorktreeMeta.load") as mock_meta:
+             patch("cwm.core.worktree_state.WorktreeMeta.load") as mock_meta:
             mock_meta.return_value.repo_name = "repo"
             mock_meta.return_value.base_sha = "abc123"
 
-            cs = compute_changeset(config, "feature-x")
+            changeset = compute_changeset(config, "feature-x")
 
-        assert cs.changed == set()
-        assert cs.affected == set()
-        assert cs.build_order == []
+        assert changeset.changed == set()
+        assert changeset.affected == set()
+        assert changeset.build_order == []

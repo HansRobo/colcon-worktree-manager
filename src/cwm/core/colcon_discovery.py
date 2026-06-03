@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cwm.core.dga import DependencyGraphAnalyzer
+from cwm.core.dependency_graph import DependencyGraphAnalyzer
 from cwm.util import git
 
 
@@ -51,7 +51,7 @@ class ColconDiscoveryController:
 
     def get_changed_packages(
         self,
-        dga: DependencyGraphAnalyzer,
+        graph: DependencyGraphAnalyzer,
         changed_files: list[str] | None = None,
     ) -> set[str]:
         """Map changed files to the ROS packages that contain them.
@@ -71,8 +71,8 @@ class ColconDiscoveryController:
         resolved_src = self._src.resolve()
         pkg_entries = sorted(
             (
-                (name, dga.package_path(name).resolve().relative_to(resolved_src))
-                for name in dga.packages
+                (name, graph.package_path(name).resolve().relative_to(resolved_src))
+                for name in graph.packages
             ),
             key=lambda e: len(e[1].parts),
             reverse=True,
@@ -104,7 +104,7 @@ class ColconDiscoveryController:
 
         *changed_pkgs* are packages directly modified by the developer.
         *affected_pkgs* are reverse dependencies that must also be rebuilt
-        for ABI safety (as computed by DGA).
+        for ABI safety (as computed by DependencyGraphAnalyzer).
 
         The combined set is passed to ``--packages-select`` and
         ``--allow-overriding``.
@@ -139,15 +139,15 @@ class ColconDiscoveryController:
 
     # -- COLCON_IGNORE fallback ------------------------------------------------
 
-    def place_ignore_markers(self, dga: DependencyGraphAnalyzer, keep: set[str]) -> list[Path]:
+    def place_ignore_markers(self, graph: DependencyGraphAnalyzer, keep: set[str]) -> list[Path]:
         """Place COLCON_IGNORE markers in all packages NOT in *keep*.
 
         Returns the list of created marker paths for later cleanup.
         """
         markers: list[Path] = []
-        for pkg_name in dga.packages:
+        for pkg_name in graph.packages:
             if pkg_name not in keep:
-                marker = dga.package_path(pkg_name) / "COLCON_IGNORE"
+                marker = graph.package_path(pkg_name) / "COLCON_IGNORE"
                 marker.touch()
                 markers.append(marker)
         return markers

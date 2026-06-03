@@ -12,7 +12,7 @@ from cwm.cli.completion import complete_worktree_branches
 from cwm.cli.main import ws
 from cwm.core.config import Config
 from cwm.errors import CWMError, NotActivatedError
-from cwm.util.fs import find_project_root
+from cwm.util.filesystem import find_project_root
 
 ARTIFACT_DIRS = ("build", "install", "log")
 

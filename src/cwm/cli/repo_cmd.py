@@ -8,7 +8,7 @@ from cwm.cli.main import cli
 from cwm.core.config import Config
 from cwm.errors import CWMError
 from cwm.util import git
-from cwm.util.fs import find_project_root
+from cwm.util.filesystem import find_project_root
 from cwm.util.repos import discover_sub_repos, validate_repo_path
 
 
@@ -87,7 +87,7 @@ def _complete_repos(
 ) -> list:
     from click.shell_completion import CompletionItem
     try:
-        from cwm.util.fs import find_project_root
+        from cwm.util.filesystem import find_project_root
         root = find_project_root()
         config = Config.load(root)
         repos = discover_sub_repos(config.base_src_path)

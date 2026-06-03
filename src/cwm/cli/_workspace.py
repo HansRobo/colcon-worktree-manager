@@ -8,12 +8,12 @@ from pathlib import Path
 
 import click
 
-from cwm.core.cdc import ColconDiscoveryController
+from cwm.core.colcon_discovery import ColconDiscoveryController
 from cwm.core.changeset import Changeset, compute_changeset
 from cwm.core.config import Config
 from cwm.errors import CWMError, NotActivatedError
 from cwm.util.colcon_runner import run_colcon, run_colcon_sourced
-from cwm.util.fs import find_project_root
+from cwm.util.filesystem import find_project_root
 
 
 def resolve_worktree(worktree_branch: str | None, *, command: str) -> tuple[str, Path, Config]:
@@ -70,22 +70,22 @@ def run_workspace_colcon(
     src_path = config.worktree_src_path(branch)
 
     click.echo("Scanning packages...")
-    cs = compute_changeset(config, branch, no_rdeps=no_rdeps)
-    click.echo(f"  Found {cs.package_count} packages")
+    changeset = compute_changeset(config, branch, no_rdeps=no_rdeps)
+    click.echo(f"  Found {changeset.package_count} packages")
 
     click.echo("Detecting changes...")
-    if not cs.changed:
+    if not changeset.changed:
         click.echo(f"No changed packages detected. Nothing to {subcommand}.")
         return
 
-    click.echo(f"  Changed: {', '.join(sorted(cs.changed))}")
-    if cs.affected:
-        click.echo(f"  Affected (reverse deps): {', '.join(sorted(cs.affected))}")
+    click.echo(f"  Changed: {', '.join(sorted(changeset.changed))}")
+    if changeset.affected:
+        click.echo(f"  Affected (reverse deps): {', '.join(sorted(changeset.affected))}")
     if show_build_order:
-        click.echo(f"  Build order: {' -> '.join(cs.build_order)}")
+        click.echo(f"  Build order: {' -> '.join(changeset.build_order)}")
 
-    cdc = ColconDiscoveryController(src_path)
-    colcon_extra = generate_args(cdc, cs, config)
+    discovery = ColconDiscoveryController(src_path)
+    colcon_extra = generate_args(discovery, changeset, config)
     colcon_extra.extend(colcon_args)
 
     if dry_run:

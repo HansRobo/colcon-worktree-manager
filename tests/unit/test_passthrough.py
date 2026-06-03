@@ -33,13 +33,13 @@ class TestBuildPassthrough:
         runner = CliRunner()
         with patch("cwm.cli._workspace.find_project_root", return_value=tmp_path), \
              patch("cwm.core.config.Config.load") as mock_cfg, \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.scan"), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_files_meta", return_value=[]), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_packages", return_value={"my_pkg"}), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.get_reverse_deps", return_value=set()), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.topological_sort", return_value=["my_pkg"]), \
-             patch("cwm.core.cdc.ColconDiscoveryController.generate_build_args", return_value=["--packages-select", "my_pkg"]), \
-             patch("cwm.core.wsm.WorktreeMeta.load") as mock_meta:
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.scan"), \
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_files_meta", return_value=[]), \
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_packages", return_value={"my_pkg"}), \
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.get_reverse_deps", return_value=set()), \
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.topological_sort", return_value=["my_pkg"]), \
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.generate_build_args", return_value=["--packages-select", "my_pkg"]), \
+             patch("cwm.core.worktree_state.WorktreeMeta.load") as mock_meta:
 
             cfg = mock_cfg.return_value
             cfg.worktree_ws_path.return_value = ws
@@ -70,13 +70,13 @@ class TestBuildPassthrough:
         runner = CliRunner()
         with patch("cwm.cli._workspace.find_project_root", return_value=tmp_path), \
              patch("cwm.core.config.Config.load") as mock_cfg, \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.scan"), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_files_meta", return_value=[]), \
-             patch("cwm.core.cdc.ColconDiscoveryController.get_changed_packages", return_value={"my_pkg"}), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.get_reverse_deps", return_value=set()), \
-             patch("cwm.core.dga.DependencyGraphAnalyzer.topological_sort", return_value=["my_pkg"]), \
-             patch("cwm.core.cdc.ColconDiscoveryController.generate_build_args", return_value=[]), \
-             patch("cwm.core.wsm.WorktreeMeta.load") as mock_meta:
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.scan"), \
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_files_meta", return_value=[]), \
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.get_changed_packages", return_value={"my_pkg"}), \
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.get_reverse_deps", return_value=set()), \
+             patch("cwm.core.dependency_graph.DependencyGraphAnalyzer.topological_sort", return_value=["my_pkg"]), \
+             patch("cwm.core.colcon_discovery.ColconDiscoveryController.generate_build_args", return_value=[]), \
+             patch("cwm.core.worktree_state.WorktreeMeta.load") as mock_meta:
 
             cfg = mock_cfg.return_value
             cfg.worktree_ws_path.return_value = ws

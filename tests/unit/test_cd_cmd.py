@@ -10,7 +10,7 @@ from click.testing import CliRunner
 
 from cwm.cli.cd_cmd import _resolve, cd, cd_resolve, switch
 from cwm.core.config import Config
-from cwm.core.wsm import WorktreeMeta
+from cwm.core.worktree_state import WorktreeMeta
 from cwm.errors import CWMError
 
 

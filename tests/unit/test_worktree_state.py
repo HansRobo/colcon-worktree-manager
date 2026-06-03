@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from cwm.core.config import COLCON_IGNORE, Config
-from cwm.core.wsm import WorktreeMeta, WorktreeStateManager
+from cwm.core.worktree_state import WorktreeMeta, WorktreeStateManager
 from cwm.errors import (
     NoRepoSelectedError,
     WorktreeExistsError,
@@ -46,24 +46,24 @@ def project(tmp_path: Path) -> Config:
 
 class TestCreateWorktree:
     def test_creates_workspace_dirs(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
-        ws = wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        ws = manager.create_worktree("feature-fix")
 
         assert (ws / "build").is_dir()
         assert (ws / "install").is_dir()
         assert (ws / "log").is_dir()
 
     def test_creates_git_worktree(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
 
         checkout = project.worktree_ws_path("feature-fix") / "src" / "my_repo"
         assert checkout.is_dir()
         assert (checkout / ".git").exists()
 
     def test_saves_metadata(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
 
         meta = WorktreeMeta.load(project.worktree_meta_path("feature-fix"))
         assert meta.branch == "feature-fix"
@@ -72,89 +72,89 @@ class TestCreateWorktree:
         assert meta.base_branch == "main"
 
     def test_raises_if_already_exists(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         with pytest.raises(WorktreeExistsError):
-            wsm.create_worktree("feature-fix")
+            manager.create_worktree("feature-fix")
 
     def test_raises_when_no_repo_selected(self, tmp_path: Path) -> None:
         root = tmp_path / "no_repo"
         root.mkdir()
         config = Config(underlay="/opt/ros/jazzy", repo=None, project_root=root)
         (config.cwm_dir / "worktrees").mkdir(parents=True)
-        wsm = WorktreeStateManager(config)
+        manager = WorktreeStateManager(config)
         with pytest.raises(NoRepoSelectedError):
-            wsm.create_worktree("feature-fix")
+            manager.create_worktree("feature-fix")
 
     def test_places_colcon_ignore_marker(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         assert (project.worktrees_path / COLCON_IGNORE).is_file()
 
 
 class TestRemoveWorktree:
     def test_removes_workspace_and_meta(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         ws = project.worktree_ws_path("feature-fix")
 
-        wsm.remove_worktree("feature-fix")
+        manager.remove_worktree("feature-fix")
 
         assert not ws.exists()
         assert not project.worktree_meta_path("feature-fix").exists()
 
     def test_idempotent_when_checkout_already_deleted(self, project: Config) -> None:
         """Core bug fix: remove must not fail when ws_path was manually deleted."""
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         ws = project.worktree_ws_path("feature-fix")
 
         import shutil
         shutil.rmtree(ws)
 
         # Must not raise WorktreeNotFoundError
-        wsm.remove_worktree("feature-fix")
+        manager.remove_worktree("feature-fix")
 
         assert not project.worktree_meta_path("feature-fix").exists()
 
     def test_idempotent_when_meta_already_deleted(self, project: Config) -> None:
         """Remove must clean up git side even if meta is missing."""
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         meta_path = project.worktree_meta_path("feature-fix")
         meta_path.unlink()
 
         # Must not raise; git worktree remove + prune should run
-        wsm.remove_worktree("feature-fix")
+        manager.remove_worktree("feature-fix")
 
         assert not project.worktree_ws_path("feature-fix").exists()
 
     def test_remove_calls_git_prune(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
 
         with patch("cwm.util.git.worktree_prune") as mock_prune:
-            wsm.remove_worktree("feature-fix")
+            manager.remove_worktree("feature-fix")
 
         mock_prune.assert_called_once()
 
     def test_delete_branch_flag(self, project: Config) -> None:
         from cwm.util import git as gitutil
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
 
-        wsm.remove_worktree("feature-fix", delete_branch=True)
+        manager.remove_worktree("feature-fix", delete_branch=True)
 
         assert not gitutil.branch_exists("feature-fix", cwd=project.base_src_path / "my_repo")
 
 
 class TestAgentSymlinks:
     def test_metadata_round_trips_agent_symlinks(self, project: Config, tmp_path: Path) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         link = tmp_path / "feature-fix"
 
-        wsm.register_agent_symlink("feature-fix", link)
+        manager.register_agent_symlink("feature-fix", link)
 
         reloaded = WorktreeMeta.load(project.worktree_meta_path("feature-fix"))
         assert str(link.absolute()) in reloaded.agent_symlinks
@@ -162,36 +162,36 @@ class TestAgentSymlinks:
         assert link.resolve() == project.worktree_ws_path("feature-fix").resolve()
 
     def test_register_is_idempotent(self, project: Config, tmp_path: Path) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         link = tmp_path / "feature-fix"
 
-        wsm.register_agent_symlink("feature-fix", link)
-        wsm.register_agent_symlink("feature-fix", link)
+        manager.register_agent_symlink("feature-fix", link)
+        manager.register_agent_symlink("feature-fix", link)
 
         meta = WorktreeMeta.load(project.worktree_meta_path("feature-fix"))
         assert meta.agent_symlinks.count(str(link.absolute())) == 1
 
     def test_remove_worktree_unlinks_symlink(self, project: Config, tmp_path: Path) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         link = tmp_path / "feature-fix"
-        wsm.register_agent_symlink("feature-fix", link)
+        manager.register_agent_symlink("feature-fix", link)
 
-        wsm.remove_worktree("feature-fix")
+        manager.remove_worktree("feature-fix")
 
         assert not link.is_symlink()
         assert not link.exists()
 
     def test_remove_worktree_tolerates_already_deleted_symlink(self, project: Config, tmp_path: Path) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         link = tmp_path / "feature-fix"
-        wsm.register_agent_symlink("feature-fix", link)
+        manager.register_agent_symlink("feature-fix", link)
         link.unlink()  # user removed the symlink manually
 
         # Must not raise
-        wsm.remove_worktree("feature-fix")
+        manager.remove_worktree("feature-fix")
 
 
 class TestLifecycleLocking:
@@ -209,36 +209,36 @@ class TestLifecycleLocking:
             os.close(fd)
 
     def test_create_worktree_holds_lock(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
+        manager = WorktreeStateManager(project)
 
         def side_effect(*args: object, **kwargs: object) -> None:
             self._assert_lock_held(project.cwm_dir)
 
         with patch("cwm.util.git.worktree_add", side_effect=side_effect):
-            wsm.create_worktree("feature-fix")
+            manager.create_worktree("feature-fix")
 
     def test_remove_worktree_holds_lock(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
 
         def side_effect(*args: object, **kwargs: object) -> None:
             self._assert_lock_held(project.cwm_dir)
 
         with patch("cwm.util.git.worktree_remove", side_effect=side_effect):
-            wsm.remove_worktree("feature-fix")
+            manager.remove_worktree("feature-fix")
 
     def test_prune_stale_holds_lock(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
+        manager = WorktreeStateManager(project)
 
         def side_effect(*args: object, **kwargs: object) -> None:
             self._assert_lock_held(project.cwm_dir)
 
         with patch("cwm.util.git.worktree_prune", side_effect=side_effect):
-            wsm.prune_stale()
+            manager.prune_stale()
 
     def test_create_worktree_creates_lock_file(self, project: Config) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         assert (project.cwm_dir / "lock").exists()
 
 
@@ -289,7 +289,7 @@ class TestGitWrapperBehaviour:
 
     @staticmethod
     def _prepare(tmp_path: Path) -> tuple[Path, str, Path]:
-        from cwm.core.wsm import _write_git_wrapper
+        from cwm.core.worktree_state import _write_git_wrapper
 
         log = tmp_path / "calls.log"
         realbin = tmp_path / "realbin"
@@ -357,37 +357,37 @@ class TestGitWrapperBehaviour:
 
 class TestRegisterAgentSymlinkRejection:
     def test_refuses_existing_regular_directory(self, project: Config, tmp_path: Path) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         existing = tmp_path / "feature-fix"
         existing.mkdir()
 
         from cwm.errors import CWMError
         with pytest.raises(CWMError):
-            wsm.register_agent_symlink("feature-fix", existing)
+            manager.register_agent_symlink("feature-fix", existing)
 
     def test_refuses_existing_regular_file(self, project: Config, tmp_path: Path) -> None:
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         existing = tmp_path / "feature-fix"
         existing.write_text("conflict")
 
         from cwm.errors import CWMError
         with pytest.raises(CWMError):
-            wsm.register_agent_symlink("feature-fix", existing)
+            manager.register_agent_symlink("feature-fix", existing)
 
     def test_normalises_double_dot_in_stored_path(
         self, project: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """register_agent_symlink must collapse '..' so later lookups from a
         different cwd resolve to the same string."""
-        wsm = WorktreeStateManager(project)
-        wsm.create_worktree("feature-fix")
+        manager = WorktreeStateManager(project)
+        manager.create_worktree("feature-fix")
         sub = tmp_path / "sub"
         sub.mkdir()
         monkeypatch.chdir(sub)
         # ../sibling resolves to tmp_path/sibling after collapsing '..'.
-        registered = wsm.register_agent_symlink("feature-fix", Path("../sibling"))
+        registered = manager.register_agent_symlink("feature-fix", Path("../sibling"))
 
         assert ".." not in str(registered)
         # The stored link path itself (not its target) should be the

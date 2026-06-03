@@ -39,8 +39,8 @@ def build(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_arg
             no_rdeps=no_rdeps,
             dry_run=dry_run,
             colcon_args=colcon_args,
-            generate_args=lambda cdc, cs, config: cdc.generate_build_args(
-                cs.changed, cs.affected, symlink_install=config.symlink_install
+            generate_args=lambda discovery, changeset, config: discovery.generate_build_args(
+                changeset.changed, changeset.affected, symlink_install=config.symlink_install
             ),
             show_build_order=True,
             done_message="Build complete.",

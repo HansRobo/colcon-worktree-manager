@@ -205,9 +205,9 @@ cwm graph
 
 CWM consists of three core modules:
 
-1. **Colcon Discovery Controller (CDC)** - Detects changed packages via git diff and controls colcon's package discovery
-2. **Dependency Graph Analyzer (DGA)** - Parses `package.xml` files to build a DAG and computes ABI reverse dependencies (`build_depends`/`build_export_depends`; `exec_depends` are runtime-only and excluded)
-3. **Worktree State Manager (WSM)** - Manages git worktree lifecycle and environment isolation
+1. **Colcon Discovery Controller** (`core/colcon_discovery.py`) - Detects changed packages via git diff and controls colcon's package discovery
+2. **Dependency Graph Analyzer** (`core/dependency_graph.py`) - Parses `package.xml` files to build a DAG and computes ABI reverse dependencies (`build_depends`/`build_export_depends`; `exec_depends` are runtime-only and excluded)
+3. **Worktree State Manager** (`core/worktree_state.py`) - Manages git worktree lifecycle and environment isolation
 
 ### Directory Structure
 
