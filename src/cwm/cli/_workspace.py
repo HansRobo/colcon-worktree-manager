@@ -58,19 +58,21 @@ def run_workspace_colcon(
     generate_args: Callable[[ColconDiscoveryController, Changeset, Config], list[str]],
     show_build_order: bool = False,
     done_message: str,
+    rdeps_depth: int | None = None,
 ) -> None:
     """Run a diff-based ``colcon <subcommand>`` over a worktree's change set.
 
     Resolves the target worktree, scans for changed packages (plus ABI reverse
-    deps unless *no_rdeps*), delegates colcon argument generation to
-    *generate_args*, and either prints the command (*dry_run*) or runs it —
-    inheriting the active environment, or sourcing underlay+overlay for ``-w``.
+    deps unless *no_rdeps*, bounded to *rdeps_depth* levels when given),
+    delegates colcon argument generation to *generate_args*, and either prints
+    the command (*dry_run*) or runs it — inheriting the active environment, or
+    sourcing underlay+overlay for ``-w``.
     """
     branch, ws_path, config = resolve_worktree(worktree_branch, command=f"ws {subcommand}")
     src_path = config.worktree_src_path(branch)
 
     click.echo("Scanning packages...")
-    changeset = compute_changeset(config, branch, no_rdeps=no_rdeps)
+    changeset = compute_changeset(config, branch, no_rdeps=no_rdeps, rdeps_depth=rdeps_depth)
     click.echo(f"  Found {changeset.package_count} packages")
 
     click.echo("Detecting changes...")

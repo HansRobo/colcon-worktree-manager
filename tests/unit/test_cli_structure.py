@@ -40,6 +40,7 @@ class TestCliHelp:
             "ws",
             "inspect",
             "base",
+            "doctor",
         ]
 
     def test_worktree_help_lists_commands_in_public_order(self) -> None:
@@ -69,4 +70,12 @@ class TestCliHelp:
         result = runner.invoke(cli, ["inspect", "--help"])
 
         assert result.exit_code == 0, result.output
-        assert _listed_commands(result.output) == ["env", "detect"]
+        assert _listed_commands(result.output) == ["env", "detect", "changed", "graph"]
+
+    def test_top_level_doctor_is_registered(self) -> None:
+        runner = CliRunner()
+
+        result = runner.invoke(cli, ["doctor", "--help"])
+
+        assert result.exit_code == 0, result.output
+        assert "--json" in result.output

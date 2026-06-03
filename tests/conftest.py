@@ -99,6 +99,22 @@ def sample_ws(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def chain_ws(tmp_path: Path) -> Path:
+    """Workspace with a linear dependency chain for depth-bounded rdeps tests.
+
+    Dependency graph (each depends on the previous):
+        lib0  <--  lib1  <--  lib2  <--  lib3
+    so reverse deps of ``lib0`` are lib1 (depth 1), lib2 (depth 2), lib3 (depth 3).
+    """
+    src = tmp_path / "src"
+    write_package(src, "lib0", [])
+    write_package(src, "lib1", ["lib0"])
+    write_package(src, "lib2", ["lib1"])
+    write_package(src, "lib3", ["lib2"])
+    return tmp_path
+
+
+@pytest.fixture
 def mixed_deps_ws(tmp_path: Path) -> Path:
     """Workspace exercising each dependency category for ABI-edge tests.
 

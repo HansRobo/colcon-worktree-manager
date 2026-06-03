@@ -63,6 +63,51 @@ class TestReverseDepsBFS:
         assert rdeps == {"perception_node", "control_node"}
 
 
+class TestReverseDepsDepth:
+    def test_depth_one_returns_direct_consumers(self, chain_ws: Path) -> None:
+        graph = DependencyGraphAnalyzer()
+        graph.scan(chain_ws / "src")
+        assert graph.get_reverse_deps({"lib0"}, max_depth=1) == {"lib1"}
+
+    def test_depth_two_returns_two_levels(self, chain_ws: Path) -> None:
+        graph = DependencyGraphAnalyzer()
+        graph.scan(chain_ws / "src")
+        assert graph.get_reverse_deps({"lib0"}, max_depth=2) == {"lib1", "lib2"}
+
+    def test_depth_none_returns_full_closure(self, chain_ws: Path) -> None:
+        graph = DependencyGraphAnalyzer()
+        graph.scan(chain_ws / "src")
+        assert graph.get_reverse_deps({"lib0"}, max_depth=None) == {"lib1", "lib2", "lib3"}
+
+    def test_depth_default_matches_full_closure(self, chain_ws: Path) -> None:
+        """The default (no max_depth) is unchanged from the full transitive walk."""
+        graph = DependencyGraphAnalyzer()
+        graph.scan(chain_ws / "src")
+        assert graph.get_reverse_deps({"lib0"}) == graph.get_reverse_deps({"lib0"}, max_depth=None)
+
+    def test_depth_beyond_chain_is_full_closure(self, chain_ws: Path) -> None:
+        graph = DependencyGraphAnalyzer()
+        graph.scan(chain_ws / "src")
+        assert graph.get_reverse_deps({"lib0"}, max_depth=99) == {"lib1", "lib2", "lib3"}
+
+
+class TestForwardEdges:
+    def test_returns_direct_dependencies(self, sample_ws: Path) -> None:
+        graph = DependencyGraphAnalyzer()
+        graph.scan(sample_ws / "src")
+        edges = graph.forward_edges()
+        assert edges["perception_node"] == {"core_lib", "msgs"}
+        assert edges["core_lib"] == set()
+
+    def test_is_a_copy(self, sample_ws: Path) -> None:
+        """Mutating the returned map must not corrupt the internal graph."""
+        graph = DependencyGraphAnalyzer()
+        graph.scan(sample_ws / "src")
+        edges = graph.forward_edges()
+        edges["perception_node"].add("bogus")
+        assert graph.forward_edges()["perception_node"] == {"core_lib", "msgs"}
+
+
 class TestTopologicalSort:
     def test_full_rebuild_order(self, sample_ws: Path) -> None:
         graph = DependencyGraphAnalyzer()
