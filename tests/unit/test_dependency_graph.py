@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
+
+import cwm.core.dependency_graph as dg_module
+from cwm.core.dag_cache import compute_fingerprint
 from cwm.core.dependency_graph import DependencyGraphAnalyzer
+from tests.conftest import write_package
 
 
 class TestDGAScan:
@@ -115,3 +121,116 @@ class TestExecDependExclusion:
         graph = DependencyGraphAnalyzer()
         graph.scan(mixed_deps_ws / "src")
         assert graph.get_forward_deps({"exec_consumer"}) == set()
+
+
+def _fail_if_parsed(*_args: object, **_kwargs: object) -> None:
+    pytest.fail("parse_package called on a cache hit")
+
+
+class TestDGACache:
+    def test_scan_without_cache_dir_unchanged(self, sample_ws: Path) -> None:
+        graph = DependencyGraphAnalyzer()
+        graph.scan(sample_ws / "src")  # cache_dir omitted -> legacy behaviour
+        assert graph.get_reverse_deps({"core_lib"}) == {
+            "perception_node",
+            "control_node",
+        }
+
+    def test_scan_hit_skips_parse_package(
+        self, sample_ws: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src = sample_ws / "src"
+        cache = tmp_path / "cache"
+        first = DependencyGraphAnalyzer()
+        first.scan(src, cache_dir=cache)  # cold: parses + stores
+
+        # A second scan of the unchanged tree must not parse any package.xml.
+        monkeypatch.setattr(dg_module, "parse_package", _fail_if_parsed)
+        second = DependencyGraphAnalyzer()
+        second.scan(src, cache_dir=cache)
+        assert second.packages == first.packages
+        assert second.get_reverse_deps({"core_lib"}) == first.get_reverse_deps({"core_lib"})
+        assert second.package_path("core_lib") == src / "core_lib"
+
+    def test_scan_rebuilds_after_edit(self, sample_ws: Path, tmp_path: Path) -> None:
+        src = sample_ws / "src"
+        cache = tmp_path / "cache"
+        DependencyGraphAnalyzer().scan(src, cache_dir=cache)
+
+        write_package(src, "standalone", deps=["core_lib"])
+        graph = DependencyGraphAnalyzer()
+        graph.scan(src, cache_dir=cache)
+        # The new edge is reflected, so the cache was invalidated and rebuilt.
+        assert graph.get_forward_deps({"standalone"}) == {"core_lib"}
+
+    def test_scan_rebuilds_after_add_remove(self, sample_ws: Path, tmp_path: Path) -> None:
+        src = sample_ws / "src"
+        cache = tmp_path / "cache"
+        DependencyGraphAnalyzer().scan(src, cache_dir=cache)
+
+        (src / "standalone" / "package.xml").unlink()
+        graph = DependencyGraphAnalyzer()
+        graph.scan(src, cache_dir=cache)
+        assert "standalone" not in graph.packages
+
+    def test_scan_rebuilds_on_format_version_mismatch(
+        self, sample_ws: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src = sample_ws / "src"
+        cache = tmp_path / "cache"
+        DependencyGraphAnalyzer().scan(src, cache_dir=cache)
+
+        fp = compute_fingerprint(src)
+        path = cache / f"{fp}.json"
+        data = json.loads(path.read_text())
+        data["cache_format_version"] = 999
+        path.write_text(json.dumps(data))
+
+        # A bumped format version is a miss -> parse_package must run again.
+        calls: list[Path] = []
+        real_parse = dg_module.parse_package
+        monkeypatch.setattr(
+            dg_module,
+            "parse_package",
+            lambda p, *a, **k: calls.append(p) or real_parse(p, *a, **k),
+        )
+        DependencyGraphAnalyzer().scan(src, cache_dir=cache)
+        assert calls  # rebuilt from source
+
+    def test_scan_falls_back_on_corrupt_cache(self, sample_ws: Path, tmp_path: Path) -> None:
+        src = sample_ws / "src"
+        cache = tmp_path / "cache"
+        DependencyGraphAnalyzer().scan(src, cache_dir=cache)
+
+        fp = compute_fingerprint(src)
+        (cache / f"{fp}.json").write_text("{garbage")
+
+        graph = DependencyGraphAnalyzer()
+        graph.scan(src, cache_dir=cache)  # must not raise
+        assert graph.get_reverse_deps({"core_lib"}) == {
+            "perception_node",
+            "control_node",
+        }
+
+    def test_cache_shared_across_identical_src(
+        self, sample_ws: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src_a = sample_ws / "src"
+        cache = tmp_path / "cache"
+        DependencyGraphAnalyzer().scan(src_a, cache_dir=cache)
+
+        # A second worktree with the same packages at a different absolute root
+        # shares the cache entry (same fingerprint), without re-parsing.
+        src_b = tmp_path / "wt_b" / "src"
+        src_b.mkdir(parents=True)
+        for pkg_dir in sorted(src_a.iterdir()):
+            dest = src_b / pkg_dir.name
+            dest.mkdir()
+            (dest / "package.xml").write_text((pkg_dir / "package.xml").read_text())
+
+        assert compute_fingerprint(src_a) == compute_fingerprint(src_b)
+        monkeypatch.setattr(dg_module, "parse_package", _fail_if_parsed)
+        graph = DependencyGraphAnalyzer()
+        graph.scan(src_b, cache_dir=cache)
+        # Paths are restored against src_b, not the worktree the cache came from.
+        assert graph.package_path("core_lib") == src_b / "core_lib"

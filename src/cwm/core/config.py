@@ -137,6 +137,10 @@ class Config:
     def cache_path(self) -> Path:
         return self.cwm_dir / CACHE_DIR
 
+    @property
+    def dag_cache_dir(self) -> Path:
+        return self.cache_path / "dag"
+
     def ensure_worktrees_ignore_marker(self) -> None:
         self.worktrees_path.mkdir(parents=True, exist_ok=True)
         (self.worktrees_path / COLCON_IGNORE).touch()
