@@ -5,7 +5,7 @@ from __future__ import annotations
 import click
 
 from cwm.cli._workspace import run_workspace_colcon
-from cwm.cli.completion import complete_worktree_branches
+from cwm.cli.completion import complete_worktree_branches, suppress_completion
 from cwm.cli.main import ws
 from cwm.errors import CWMError
 
@@ -25,9 +25,7 @@ from cwm.errors import CWMError
     is_flag=True,
     help="Skip reverse dependency analysis (unsafe, faster).",
 )
-# shell_complete suppresses Click's fallback to filesystem completion (compopt -o default),
-# which would otherwise surface the workspace's build/ directory as a tab-completion candidate.
-@click.argument("colcon_args", nargs=-1, type=click.UNPROCESSED, shell_complete=lambda ctx, param, incomplete: [])
+@click.argument("colcon_args", nargs=-1, type=click.UNPROCESSED, shell_complete=suppress_completion)
 def build(worktree_branch: str | None, dry_run: bool, no_rdeps: bool, colcon_args: tuple[str, ...]) -> None:
     """Build changed packages and their reverse dependencies.
 

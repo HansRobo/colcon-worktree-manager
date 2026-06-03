@@ -46,6 +46,10 @@ def clean(worktree_branch: str | None, clean_all: bool, clean_base: bool) -> Non
                     if ws_dir.is_dir() and ws_dir.name.endswith("_ws"):
                         targets.append((ws_dir.name, _artifact_dirs(ws_dir)))
             if clean_base:
+                click.echo(
+                    "Note: 'cwm ws clean --base' is deprecated; use 'cwm base clean'.",
+                    err=True,
+                )
                 targets.append(("base", _artifact_dirs(config.project_root)))
         elif worktree_branch:
             ws_path = config.worktree_ws_path(worktree_branch)

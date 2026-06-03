@@ -121,7 +121,26 @@ Several commands accept `--json` for machine-readable output: `cwm ws status`, `
 
 | Command | Description |
 |---------|-------------|
-| `cwm base update` | Pull the tracked repository and rebuild the base workspace |
+| `cwm base update [-- <colcon args>]` | Pull the tracked repository and rebuild the base workspace |
+| `cwm base build [-- <colcon args>]` | Rebuild the base workspace without pulling |
+| `cwm base clean [--yes]` | Remove the base build artifacts (build/, install/, log/) |
+| `cwm base status [--json]` | Show whether the base is built and dirty |
+| `cwm base doctor [--fix] [--json]` | Detect (and with `--fix` delete) stale build dirs pointing at missing sources |
+
+`base update` and `base build` source the ROS 2 underlay
+(`underlay` in `.cwm/config.yaml`, e.g. `/opt/ros/jazzy`) before invoking
+colcon, symmetric with the worktree build path. Extra arguments after `--` are
+forwarded to `colcon build` (e.g. `cwm base build -- --continue-on-error`).
+
+`base clean` removes the shared base install that every worktree overlays as
+its underlay, so all worktrees will need rebuilding afterwards (it prompts for
+confirmation unless `--yes` is given). `cwm ws clean --base` is deprecated in
+favour of `cwm base clean`.
+
+`base doctor` reads each `build/<pkg>/CMakeCache.txt` and flags build
+directories whose source no longer exists (e.g. a moved or deleted package),
+which otherwise surface as `CMake Error`s on the next build; `--fix` deletes
+only those directories.
 
 ### AI agent integration
 

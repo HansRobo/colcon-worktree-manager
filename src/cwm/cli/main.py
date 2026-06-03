@@ -174,7 +174,7 @@ def base() -> None:
     """Manage the base (underlay) workspace."""
 
 
-base.command_order = ["update"]
+base.command_order = ["update", "build", "clean", "status", "doctor"]
 
 
 # Import subcommands so they register with Click groups.
