@@ -3,9 +3,28 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterator
 from pathlib import Path
 
 from catkin_pkg.package import parse_package
+
+# Directories that never contain workspace source packages.
+SKIP_DIRS = {"build", "install", "log", ".git"}
+
+
+def iter_package_xmls(src_path: Path) -> Iterator[tuple[Path, Path]]:
+    """Yield ``(package.xml path, path relative to src_path)`` for every
+    workspace package under *src_path*, in deterministic order.
+
+    Single source of truth for the workspace walk, shared by graph
+    construction and :func:`cwm.core.dag_cache.compute_fingerprint` so both
+    visit exactly the same set of files.
+    """
+    for pkg_xml in sorted(src_path.rglob("package.xml")):
+        rel = pkg_xml.relative_to(src_path)
+        if SKIP_DIRS.intersection(rel.parts):
+            continue
+        yield pkg_xml, rel
 
 
 class DependencyGraphAnalyzer:
@@ -35,7 +54,33 @@ class DependencyGraphAnalyzer:
 
     # -- Graph construction ----------------------------------------------------
 
-    def scan(self, src_path: Path) -> None:
+    def scan(self, src_path: Path, *, cache_dir: Path | None = None) -> None:
+        """Discover packages under *src_path* and build the dependency graph.
+
+        When *cache_dir* is given, a serialised graph is loaded from it if the
+        ``package.xml`` fingerprint matches (skipping the expensive XML parse);
+        otherwise the graph is rebuilt and stored for next time. With
+        *cache_dir* ``None`` the graph is always rebuilt from disk.
+        """
+        if cache_dir is None:
+            self._rebuild_from_src(src_path)
+            return
+
+        # Local import to break the dependency_graph <-> dag_cache import cycle.
+        from cwm.core import dag_cache
+
+        fingerprint = dag_cache.compute_fingerprint(src_path)
+        cached = dag_cache.load_cached_graph(cache_dir, src_path, fingerprint)
+        if cached is not None:
+            self._pkg_paths = cached._pkg_paths
+            self._forward = cached._forward
+            self._reverse = cached._reverse
+            return
+
+        self._rebuild_from_src(src_path)
+        dag_cache.store_cached_graph(cache_dir, fingerprint, self, src_path)
+
+    def _rebuild_from_src(self, src_path: Path) -> None:
         """Walk *src_path* to discover packages and build the dependency graph.
 
         Each directory containing a ``package.xml`` is treated as a ROS
@@ -51,14 +96,9 @@ class DependencyGraphAnalyzer:
         self._forward.clear()
         self._reverse.clear()
 
-        _SKIP_DIRS = {"build", "install", "log", ".git"}
-
         # Single-pass: discover all packages and collect raw dependency names
         parsed: list[tuple[str, list[str]]] = []
-        for pkg_xml in sorted(src_path.rglob("package.xml")):
-            rel = pkg_xml.relative_to(src_path)
-            if _SKIP_DIRS.intersection(rel.parts):
-                continue
+        for pkg_xml, _rel in iter_package_xmls(src_path):
             pkg = parse_package(pkg_xml)
             self._pkg_paths[pkg.name] = pkg_xml.parent
             self._forward[pkg.name] = set()
@@ -75,6 +115,41 @@ class DependencyGraphAnalyzer:
             self._forward[pkg_name] = deps
             for dep_name in deps:
                 self._reverse[dep_name].add(pkg_name)
+
+    # -- Serialisation ---------------------------------------------------------
+
+    def to_dict(self, src_path: Path) -> dict:
+        """Serialise the graph to a plain dict keyed by package name.
+
+        Package directories are stored relative to *src_path* so the cache can
+        be shared across worktrees that hold the same packages at different
+        absolute locations. The reverse edges are derived from the forward
+        edges on load and therefore not stored.
+        """
+        return {
+            "packages": {
+                name: {
+                    "path": self._pkg_paths[name].relative_to(src_path).as_posix(),
+                    "forward": sorted(self._forward.get(name, ())),
+                }
+                for name in sorted(self._pkg_paths)
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict, src_path: Path) -> DependencyGraphAnalyzer:
+        """Reconstruct a graph from :meth:`to_dict` output rooted at *src_path*."""
+        graph = cls()
+        packages = data["packages"]
+        for name, entry in packages.items():
+            graph._pkg_paths[name] = src_path / entry["path"]
+            graph._forward[name] = set(entry["forward"])
+            graph._reverse.setdefault(name, set())
+        # Rebuild reverse edges from forward edges.
+        for name, deps in graph._forward.items():
+            for dep in deps:
+                graph._reverse.setdefault(dep, set()).add(name)
+        return graph
 
     # -- Queries ---------------------------------------------------------------
 

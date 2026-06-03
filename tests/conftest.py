@@ -27,6 +27,39 @@ def make_git_repo(path: Path, branch: str = "main") -> None:
     subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=path, check=True, capture_output=True, env=GIT_ENV)
 
 
+def make_package_xml(name: str, deps: list[str] | None = None, *, dep_xml: str | None = None) -> str:
+    """Render a minimal ``package.xml``.
+
+    Pass *deps* for the common ``<depend>`` case, or *dep_xml* to supply a
+    pre-rendered dependency block (e.g. mixed build/exec/export tags).
+    """
+    if dep_xml is None:
+        dep_xml = "\n".join(f"  <depend>{d}</depend>" for d in (deps or []))
+    return f"""<?xml version="1.0"?>
+<package format="3">
+  <name>{name}</name>
+  <version>0.0.0</version>
+  <description>Test package</description>
+  <maintainer email="test@test.com">test</maintainer>
+  <license>Apache-2.0</license>
+{dep_xml}
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+"""
+
+
+def write_package(
+    src: Path, name: str, deps: list[str] | None = None, *, dep_xml: str | None = None
+) -> Path:
+    """Create (or overwrite) ``src/<name>/package.xml`` and return its directory."""
+    pkg_dir = src / name
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    (pkg_dir / "package.xml").write_text(make_package_xml(name, deps, dep_xml=dep_xml))
+    return pkg_dir
+
+
 @pytest.fixture
 def sample_ws(tmp_path: Path) -> Path:
     """Create a minimal ROS 2 workspace layout with known dependencies.
@@ -60,26 +93,7 @@ def sample_ws(tmp_path: Path) -> Path:
 
     src = tmp_path / "src"
     for name, info in pkgs.items():
-        pkg_dir = src / name
-        pkg_dir.mkdir(parents=True)
-        dep_xml = "\n".join(
-            f"  <depend>{d}</depend>" for d in info["deps"]
-        )
-        (pkg_dir / "package.xml").write_text(
-            f"""<?xml version="1.0"?>
-<package format="3">
-  <name>{name}</name>
-  <version>0.0.0</version>
-  <description>Test package</description>
-  <maintainer email="test@test.com">test</maintainer>
-  <license>Apache-2.0</license>
-{dep_xml}
-  <export>
-    <build_type>ament_cmake</build_type>
-  </export>
-</package>
-"""
-        )
+        write_package(src, name, info["deps"])
 
     return tmp_path
 
@@ -107,27 +121,11 @@ def mixed_deps_ws(tmp_path: Path) -> Path:
 
     src = tmp_path / "src"
     for name, deps_by_tag in pkgs.items():
-        pkg_dir = src / name
-        pkg_dir.mkdir(parents=True)
         dep_xml = "\n".join(
             f"  <{tag}>{dep}</{tag}>"
             for tag, deps in deps_by_tag.items()
             for dep in deps
         )
-        (pkg_dir / "package.xml").write_text(
-            f"""<?xml version="1.0"?>
-<package format="3">
-  <name>{name}</name>
-  <version>0.0.0</version>
-  <description>Test package</description>
-  <maintainer email="test@test.com">test</maintainer>
-  <license>Apache-2.0</license>
-{dep_xml}
-  <export>
-    <build_type>ament_cmake</build_type>
-  </export>
-</package>
-"""
-        )
+        write_package(src, name, dep_xml=dep_xml)
 
     return tmp_path

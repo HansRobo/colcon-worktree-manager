@@ -37,7 +37,7 @@ def compute_changeset(config: Config, branch: str, *, no_rdeps: bool = False) ->
     src_path = config.worktree_src_path(branch)
 
     graph = DependencyGraphAnalyzer()
-    graph.scan(src_path)
+    graph.scan(src_path, cache_dir=config.dag_cache_dir)
 
     discovery = ColconDiscoveryController(src_path)
     meta = WorktreeMeta.load(config.worktree_meta_path(branch))
