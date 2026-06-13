@@ -71,11 +71,31 @@ __cwm_real_git_exec() {
     exit 127
 }
 
-# Pass-through path: CWM-spawned subprocess (depth sentinel set), unrelated
-# project (no CWM_PROJECT_ROOT exported), or non-worktree subcommand.
-if [[ -n "${CWM_GIT_HOOK_DEPTH:-}" ]] || \\
-   [[ -z "${CWM_PROJECT_ROOT:-}" ]] || \\
-   [[ "$1" != "worktree" ]]; then
+# Return success if the real git subcommand is 'worktree', skipping any leading
+# global options.  Options that take a separate value ('-C <path>', '-c <kv>',
+# '--git-dir <path>', ...) are skipped in pairs so the value is not mistaken for
+# the subcommand; otherwise 'git -C <path> worktree ...' would slip through.
+__cwm_git_has_worktree() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -C|-c|--git-dir|--work-tree|--namespace|--super-prefix)
+                shift 2 || return 1 ;;
+            -*) shift ;;
+            worktree) return 0 ;;
+            *) return 1 ;;
+        esac
+    done
+    return 1
+}
+
+# Pass-through path: CWM-spawned subprocess (depth sentinel set) or unrelated
+# project (no CWM_PROJECT_ROOT exported).
+if [[ -n "${CWM_GIT_HOOK_DEPTH:-}" ]] || [[ -z "${CWM_PROJECT_ROOT:-}" ]]; then
+    __cwm_real_git_exec "$@"
+fi
+
+# Non-worktree invocations (even behind global options) go straight to real git.
+if [[ "$1" != "worktree" ]] && ! __cwm_git_has_worktree "$@"; then
     __cwm_real_git_exec "$@"
 fi
 
@@ -86,7 +106,12 @@ if ! command -v cwm >/dev/null 2>&1; then
     echo "cwm git wrapper: 'cwm' not found on PATH; delegating to real git" >&2
     __cwm_real_git_exec "$@"
 fi
-shift
+# Fast path: a bare 'git worktree ...' strips the subcommand token.  Behind
+# leading global options, forward the original argv unshifted so the hook can
+# refuse repository-retargeting options ('-C', '--git-dir', '--work-tree').
+if [[ "$1" == "worktree" ]]; then
+    shift
+fi
 exec cwm worktree __git_hook "$@"
 """
 

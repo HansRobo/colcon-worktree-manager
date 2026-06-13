@@ -16,7 +16,6 @@ from cwm.core.worktree_state import WorktreeMeta, WorktreeStateManager
 from cwm.errors import (
     NoRepoSelectedError,
     WorktreeExistsError,
-    WorktreeNotFoundError,
 )
 from tests.conftest import make_git_repo
 
@@ -353,6 +352,25 @@ class TestGitWrapperBehaviour:
             CWM_PROJECT_ROOT=str(tmp_path),
         )
         assert log.read_text() == "CWM worktree __git_hook add -b x ../x\n"
+
+    def test_forwards_worktree_behind_global_option_to_cwm_hook(self, tmp_path: Path) -> None:
+        """'git -C <path> worktree ...' must not slip past the interceptor; the
+        original argv is forwarded unshifted so the hook can apply policy."""
+        wrapper, path, log = self._prepare(tmp_path)
+        self._invoke(
+            wrapper,
+            path,
+            ["-C", "/x", "worktree", "add", "-b", "y", "../y"],
+            CWM_PROJECT_ROOT=str(tmp_path),
+        )
+        assert log.read_text() == "CWM worktree __git_hook -C /x worktree add -b y ../y\n"
+
+    def test_delegates_to_real_git_for_global_option_non_worktree(self, tmp_path: Path) -> None:
+        """A global option in front of a non-worktree subcommand must still go
+        to real git (the value after -C must not be mistaken for a subcommand)."""
+        wrapper, path, log = self._prepare(tmp_path)
+        self._invoke(wrapper, path, ["-C", "/x", "status"], CWM_PROJECT_ROOT=str(tmp_path))
+        assert log.read_text() == "REAL_GIT -C /x status\n"
 
 
 class TestRegisterAgentSymlinkRejection:

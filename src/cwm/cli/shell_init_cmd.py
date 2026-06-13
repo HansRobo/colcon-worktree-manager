@@ -69,14 +69,41 @@ __cwm_in_project() {
     return 1
 }
 
+# Return success if the real git subcommand is 'worktree', skipping any leading
+# global options.  Options that take a separate value ('-C <path>', '-c <kv>',
+# '--git-dir <path>', ...) are skipped in pairs so the value is not mistaken for
+# the subcommand; otherwise 'git -C <path> worktree ...' would slip through.
+__cwm_git_has_worktree() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -C|-c|--git-dir|--work-tree|--namespace|--super-prefix)
+                shift 2 || return 1 ;;
+            -*) shift ;;
+            worktree) return 0 ;;
+            *) return 1 ;;
+        esac
+    done
+    return 1
+}
+
 # Intercept 'git worktree' inside CWM projects and forward to the CWM hook.
 # All other git invocations (and 'git worktree' outside a CWM project) fall
 # through to the real binary via 'command git'.
 git() {
-    if [[ "$1" == "worktree" ]] && __cwm_in_project; then
-        shift
-        command cwm worktree __git_hook "$@"
-        return $?
+    if __cwm_in_project; then
+        # Fast path: a bare 'git worktree ...' strips the subcommand token.
+        if [[ "$1" == "worktree" ]]; then
+            shift
+            command cwm worktree __git_hook "$@"
+            return $?
+        fi
+        # Behind leading global options (e.g. 'git -C <path> worktree ...'),
+        # forward the original arguments unshifted so the hook can refuse
+        # repository-retargeting options instead of letting them slip through.
+        if __cwm_git_has_worktree "$@"; then
+            command cwm worktree __git_hook "$@"
+            return $?
+        fi
     fi
     command git "$@"
 }

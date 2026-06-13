@@ -47,6 +47,26 @@ class TestShellInit:
         assert 'if [[ "$1" == "worktree" ]]' in body
         assert "command git" in body
 
+    def test_git_function_intercepts_worktree_behind_global_options(self) -> None:
+        """'git -C <path> worktree ...' must not slip past the interceptor, so
+        the function consults a scanner that skips leading global options."""
+        out = _shell_init_output()
+        assert "__cwm_git_has_worktree()" in out
+        start = out.index("git()")
+        end = out.index("\n}", start)
+        body = out[start:end]
+        assert "__cwm_git_has_worktree" in body
+
+    def test_git_has_worktree_skips_value_taking_options_in_pairs(self) -> None:
+        """The scanner must skip '-C/-c/--git-dir/...' together with their value
+        so the value is not mistaken for the subcommand."""
+        out = _shell_init_output()
+        start = out.index("__cwm_git_has_worktree()")
+        end = out.index("\n}", start)
+        body = out[start:end]
+        assert "shift 2" in body
+        assert "-C|-c|--git-dir|--work-tree" in body
+
     def test_in_project_helper_breaks_on_fixed_point_dirname(self) -> None:
         """__cwm_in_project must not infinite-loop when dirname returns the
         same value (e.g. dirname '.' -> '.')."""
