@@ -125,6 +125,7 @@ def cli() -> None:
 cli.command_order = [
     "init",
     "activate",
+    "deactivate",
     "switch",
     "cd",
     "shell-init",
