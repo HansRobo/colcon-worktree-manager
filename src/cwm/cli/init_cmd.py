@@ -99,7 +99,7 @@ def init(underlay: str, repo_path: str | None) -> None:
             click.echo("  0. Select a repository: cwm repo switch <path>")
         click.echo("  1. Create a worktree:   cwm worktree add <branch>")
         click.echo("  2. Activate:            source <(cwm activate <branch>)")
-        click.echo("  3. Build:               cwm build")
+        click.echo("  3. Build:               cwm ws build")
     else:
         click.echo("  1. Clone your repository into src/")
         click.echo("  2. Select it:           cwm repo switch <path>")

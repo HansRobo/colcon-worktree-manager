@@ -278,3 +278,18 @@ class TestSwitchCommand:
         result = runner.invoke(switch, ["feature-x"])
         assert result.exit_code != 0
         assert "shell integration" in result.output
+
+
+# ---------------------------------------------------------------------------
+# deactivate CLI command (visible, shows shell-integration hint)
+# ---------------------------------------------------------------------------
+
+
+class TestDeactivateCommand:
+    def test_shows_shell_integration_hint(self):
+        from cwm.cli.activate_cmd import deactivate
+
+        runner = CliRunner()
+        result = runner.invoke(deactivate, [])
+        assert result.exit_code != 0
+        assert "shell integration" in result.output

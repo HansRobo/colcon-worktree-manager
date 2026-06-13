@@ -43,6 +43,16 @@ cwm activate requires shell integration to mutate the current shell.
     cwm deactivate          # restore previous environment
 """
 
+_DEACTIVATE_HINT = """\
+cwm deactivate requires shell integration to restore the current shell.
+
+  Set up once (add to ~/.bashrc):
+    eval "$(cwm shell-init)"
+
+  Then, after 'cwm activate <branch>':
+    cwm deactivate          # restore the previous environment
+"""
+
 
 def _bash_completion_script() -> str:
     """Return the cwm bash completion script using Click's API directly."""
@@ -328,3 +338,15 @@ def activate(branch: str | None) -> None:
 
     except CWMError as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+@cli.command("deactivate")
+def deactivate() -> None:
+    """Restore the environment saved by 'cwm activate'.
+
+    Requires shell integration. Run 'eval "$(cwm shell-init)"' first; the
+    'cwm' shell function then calls the 'deactivate' function defined by
+    'cwm activate'. Without shell integration there is no shell state to
+    restore, so this command only prints setup guidance.
+    """
+    raise click.ClickException(_DEACTIVATE_HINT.rstrip())

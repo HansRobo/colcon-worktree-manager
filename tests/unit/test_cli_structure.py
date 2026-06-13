@@ -32,6 +32,7 @@ class TestCliHelp:
         assert _listed_commands(result.output) == [
             "init",
             "activate",
+            "deactivate",
             "switch",
             "cd",
             "shell-init",
