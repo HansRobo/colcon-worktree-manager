@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from cwm.cli.main import cli
-from cwm.cli.worktree_cmd import _parse_git_worktree_add
+from cwm.cli.worktree_cmd import _parse_git_worktree_add, _strip_git_globals
 from cwm.core.config import Config
 from cwm.core.worktree_state import WorktreeMeta, WorktreeStateManager
 from tests.conftest import make_git_repo
@@ -243,6 +242,64 @@ class TestHookUnsupported:
         result = _invoke_hook(project, [], monkeypatch)
         assert result.exit_code == 1
         assert "not supported" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# leading git global options
+# ---------------------------------------------------------------------------
+
+
+class TestStripGitGlobals:
+    def test_no_globals_passthrough(self) -> None:
+        assert _strip_git_globals(["worktree", "add"]) == (["worktree", "add"], False)
+
+    def test_value_taking_option_skips_pair(self) -> None:
+        # The path after -C must not be mistaken for the subcommand.
+        assert _strip_git_globals(["-C", "/x", "worktree", "list"]) == (
+            ["worktree", "list"],
+            True,
+        )
+
+    def test_config_option_is_not_retargeting(self) -> None:
+        rest, retargeting = _strip_git_globals(["-c", "foo=bar", "worktree", "list"])
+        assert rest == ["worktree", "list"]
+        assert retargeting is False
+
+    def test_equals_form_git_dir_is_retargeting(self) -> None:
+        rest, retargeting = _strip_git_globals(["--git-dir=/x", "worktree", "list"])
+        assert rest == ["worktree", "list"]
+        assert retargeting is True
+
+    def test_bare_flag_skips_one(self) -> None:
+        rest, retargeting = _strip_git_globals(["--no-pager", "worktree", "list"])
+        assert rest == ["worktree", "list"]
+        assert retargeting is False
+
+
+class TestHookGlobalOptions:
+    def test_retargeting_option_before_worktree_is_refused(
+        self, project: Config, tmp_path: Path, monkeypatch
+    ) -> None:
+        link = tmp_path / "feature-x"
+        result = _invoke_hook(
+            project, ["-C", "/elsewhere", "worktree", "add", "-b", "feature-x", str(link)], monkeypatch
+        )
+        assert result.exit_code == 1
+        assert "not supported under CWM" in result.stderr
+        # The refused operation must not have created anything.
+        assert not project.worktree_ws_path("feature-x").exists()
+        assert not link.exists()
+
+    def test_git_dir_equals_form_is_refused(self, project: Config, monkeypatch) -> None:
+        result = _invoke_hook(project, ["--git-dir=/x", "worktree", "list"], monkeypatch)
+        assert result.exit_code == 1
+        assert "not supported under CWM" in result.stderr
+
+    def test_benign_global_option_is_processed(self, project: Config, monkeypatch) -> None:
+        # '-c foo=bar' does not retarget, so 'worktree list' runs normally.
+        result = _invoke_hook(project, ["-c", "foo=bar", "worktree", "list"], monkeypatch)
+        assert result.exit_code == 0
+        assert "my_repo" in result.stdout
 
 
 class TestHookAddErrorHandling:

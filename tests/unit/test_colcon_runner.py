@@ -36,6 +36,21 @@ class TestRunColconSourced:
 
         assert "colcon build --packages-select pkg" in mock_run.call_args[0][0][2]
 
+    def test_args_with_spaces_are_quoted(self, tmp_path: Path) -> None:
+        """A colcon argument value containing spaces must be passed as a single
+        token to the bash subshell, not word-split into separate arguments."""
+        with patch("cwm.util.colcon_runner.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            run_colcon_sourced(
+                "build", tmp_path, tmp_path / "underlay", None,
+                ["--cmake-args", "-DFOO=bar baz"],
+            )
+
+        shell_script = mock_run.call_args[0][0][2]
+        assert "'-DFOO=bar baz'" in shell_script
+        # The raw, unquoted value must not appear adjacent to --cmake-args.
+        assert "--cmake-args -DFOO=bar baz" not in shell_script
+
     def test_nonzero_exit_raises_colcon_error_with_subcommand(self, tmp_path: Path) -> None:
         with patch("cwm.util.colcon_runner.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 1

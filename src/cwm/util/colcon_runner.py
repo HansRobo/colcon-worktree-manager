@@ -74,8 +74,12 @@ def run_colcon_sourced(
     if extra_args:
         colcon_cmd.extend(extra_args)
 
-    # Build a shell command that sources the environment then runs colcon
-    shell_script = " && ".join(source_cmds) + " && " + " ".join(colcon_cmd)
+    # Build a shell command that sources the environment then runs colcon.
+    # Quote every colcon argument so values containing spaces or shell
+    # metacharacters (e.g. a '--cmake-args' value) are passed through verbatim
+    # instead of being word-split or interpreted by the bash subshell.
+    quoted_colcon = " ".join(shlex.quote(arg) for arg in colcon_cmd)
+    shell_script = " && ".join(source_cmds) + " && " + quoted_colcon
 
     result = subprocess.run(
         ["bash", "-c", shell_script],

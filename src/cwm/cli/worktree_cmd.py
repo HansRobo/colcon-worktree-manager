@@ -202,6 +202,51 @@ def _hook_unsupported(ctx: click.Context, subcmd: str) -> NoReturn:
     ctx.exit(1)
 
 
+def _hook_retarget_unsupported(ctx: click.Context) -> NoReturn:
+    _hook_msg(
+        "'git -C/--git-dir/--work-tree ... worktree' targets a different "
+        "repository and is not supported under CWM. cd into that repository "
+        "and run 'cwm worktree' (or plain 'git worktree') there.",
+        fg="yellow",
+    )
+    ctx.exit(1)
+
+
+# git global options that consume the following token as their value.  When
+# locating the real subcommand behind leading global options, these must be
+# skipped in pairs so the value (e.g. the path after '-C') is not mistaken for
+# the subcommand.
+_GIT_GLOBAL_VALUE_OPTS = frozenset(
+    {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix"}
+)
+# Global options that retarget git at a different repository or working tree.  A
+# 'git worktree' invocation behind any of these cannot be safely re-homed onto
+# the CWM-managed overlay, so it is refused rather than silently mishandled.
+_GIT_RETARGET_OPTS = frozenset({"-C", "--git-dir", "--work-tree"})
+
+
+def _strip_git_globals(args: list[str]) -> tuple[list[str], bool]:
+    """Drop leading git global options from *args*.
+
+    Returns the remaining args (starting at the first positional, i.e. the git
+    subcommand) and whether any repository-retargeting option
+    ('-C', '--git-dir', '--work-tree') appeared among them.
+    """
+    retargeting = False
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        name = args[i].split("=", 1)[0]
+        if name in _GIT_RETARGET_OPTS:
+            retargeting = True
+        # '--opt=value' is self-contained; a bare value-taking option consumes
+        # the next token too; every other flag consumes only itself.
+        if "=" not in args[i] and args[i] in _GIT_GLOBAL_VALUE_OPTS:
+            i += 2
+        else:
+            i += 1
+    return args[i:], retargeting
+
+
 def _hook_add(ctx: click.Context, rest: list[str]) -> None:
     parsed = _parse_git_worktree_add(rest)
     if parsed is None:
@@ -392,7 +437,16 @@ def _hook_prune(ctx: click.Context, rest: list[str]) -> None:
 @click.pass_context
 def git_hook(ctx: click.Context) -> None:
     """Internal: handle 'git worktree ...' calls intercepted by the shell/PATH wrapper."""
-    args = ctx.args
+    # The shell wrapper strips a bare leading 'worktree' token on its fast path,
+    # but forwards global-option invocations (e.g. 'git -C <path> worktree ...')
+    # unshifted so this hook can apply policy on them rather than let them slip
+    # past to real git.  Skip any leading global options and refuse the ones
+    # that retarget a different repository.
+    args, retargeting = _strip_git_globals(list(ctx.args))
+    if retargeting:
+        _hook_retarget_unsupported(ctx)
+    if args and args[0] == "worktree":
+        args = args[1:]
     if not args:
         _hook_unsupported(ctx, "(no subcommand)")
 
